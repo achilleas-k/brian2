@@ -1,4 +1,4 @@
-#include<neurongroup.h>
+#include "neurongroup.h"
 
 void NeuronGroup::_init()
 {

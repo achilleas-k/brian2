@@ -5,6 +5,6 @@ class NeuronGroup
 {
 public:
 	void _init();
-}
+};
 
 #endif

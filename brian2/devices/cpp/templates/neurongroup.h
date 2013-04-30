@@ -8,6 +8,6 @@
 class CLASSNAME : public NeuronGroup
 {
 public:
-}
+};
 
 extern CLASSNAME OBJNAME;

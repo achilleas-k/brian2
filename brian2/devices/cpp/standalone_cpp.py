@@ -27,8 +27,8 @@ class CPPImplementation(Implementation):
             
     def template_NeuronGroup(self, obj, f, args, kwds, templates, templatefiles):
         proc = self.get_procedure_representation(obj, f, args, kwds)
-        name_cpp = '%s.h'%obj.name
-        name_h = '%s.cpp'%obj.name
+        name_cpp = '%s.cpp'%obj.name
+        name_h = '%s.h'%obj.name
         createobj_str = 'C_%s %s();\n'%(obj.name, obj.name)
         initobj_str = '%s._init(); /* %s */\n'%(obj.name, proc)
         include_str = '#include "%s.h"\n'%obj.name
