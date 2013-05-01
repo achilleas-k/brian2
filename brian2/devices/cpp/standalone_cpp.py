@@ -159,7 +159,7 @@ class CPPImplementation(Implementation):
         cpp_files = [f.replace('\\', '/') for f in cpp_files]
         open(os.path.join(self.path, 'makefile'), 'w').write('''
 all:
-\tg++ {names} -o runsim.exe
+\tg++ {names} -o runsim
         '''.format(names=' '.join(cpp_files)))
 
 implementation = CPPImplementation()
