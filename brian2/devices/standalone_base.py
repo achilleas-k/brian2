@@ -28,6 +28,7 @@ def make_procedural(original_func, runit=True):
         if runit:
             obj = original_func(*args, **kwds)
             self.procedural_order.append((obj, original_func, args, kwds))
+            return obj
         else:
             self.procedural_order.append((None, original_func, args, kwds))
     return new_func

@@ -10,7 +10,7 @@ from brian2.equations.equations import (Equations, DIFFERENTIAL_EQUATION,
                                         STATIC_EQUATION, PARAMETER)
 from brian2.equations.refractory import add_refractoriness
 from brian2.stateupdaters.base import StateUpdateMethod
-from brian2.codegen.languages import PythonLanguage
+from brian2.codegen import get_default_language
 from brian2.memory import allocate_array
 from brian2.core.preferences import brian_prefs
 from brian2.core.base import BrianObject
@@ -187,7 +187,7 @@ class NeuronGroup(ObjectWithNamespace, BrianObject, Group, SpikeSource):
         # Code generation (TODO: this should be refactored and modularised)
         # Temporary, set default language to Python
         if language is None:
-            language = PythonLanguage()
+            language = get_default_language()
         self.language = language
 
         #: Performs thresholding step, sets the value of `spikes`

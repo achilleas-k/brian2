@@ -6,6 +6,8 @@ from jinja2 import Template
 
 import brian2
 from brian2.devices.standalone_base import Implementation
+from brian2.codegen import set_default_language
+from brian2.codegen.languages.cpp import CPPLanguage
 
 __all__ = [# Package classes and functions
            'CPPImplementation',
@@ -14,6 +16,8 @@ __all__ = [# Package classes and functions
            # Device specific objects and functions
            'build',
            ]
+
+set_default_language(CPPLanguage())
 
 curdir, _ = os.path.split(__file__)
 templatedir = os.path.join(curdir, 'templates')
@@ -29,7 +33,12 @@ class CPPImplementation(Implementation):
             open(os.path.join(self.path, 'brianlib', fname), 'w').write(open(file).read())
             
     def template_NeuronGroup(self, obj, f, args, kwds, templates, procedure_lines):
-        ns = {'name': obj.name}
+        ns = {'name': obj.name,
+              'variables':obj.arrays.keys(),
+              'num_neurons':len(obj),
+              'state_update_code':obj.state_updater.codeobj.code['%MAIN%'],
+              'dt':float(obj.clock.dt),
+              }
         tmp_cpp = ('neurongroup.cpp', obj.name+'.cpp', ns)
         tmp_h = ('neurongroup.h', obj.name+'.h', ns)
         templates.extend([tmp_cpp, tmp_h])
