@@ -1,7 +1,8 @@
 // Brian library includes
-#include "brianlib/neurongroup.h"
-#include "brianlib/briantypes.h"
-#include "brianlib/units.h"
+#include "../brianlib/groups.h"
+#include "../brianlib/briantypes.h"
+#include "../brianlib/units.h"
+#include "../brianlib/core.h"
 
 #define CLASSNAME C_{{name}}
 #define OBJNAME {{name}}

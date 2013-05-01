@@ -14,6 +14,7 @@ Ideas and questions
 
 import brian2
 import os
+import fnmatch
 
 __all__ = [# Package classes and functions
            'Implementation',
@@ -40,6 +41,52 @@ class Implementation(object):
     def __init__(self):
         self.procedural_order = []
         self.set_output_directory()
+
+    def ensure_directory(self, d):
+        '''
+        Ensures that a directory exists, and returns the path.
+        '''
+        if not os.path.exists(d):
+            os.makedirs(d)
+        return d
+    
+    def ensure_directory_of_file(self, f):
+        '''
+        Ensures that a directory exists for filename to go in (creates if
+        necessary), and returns the directory path.
+        '''
+        d = os.path.dirname(f)
+        if not os.path.exists(d):
+            os.makedirs(d)
+        return d
+    
+    def copy_directory(self, source, target):
+        '''
+        Copies directory source to target.
+        '''
+        sourcebase = os.path.normpath(source)+os.path.sep
+        for root, dirnames, filenames in os.walk(source):
+            for filename in filenames:
+                fullname = os.path.normpath(os.path.join(root, filename))
+                relname = fullname.replace(sourcebase, '')
+                tgtname = os.path.join(target, relname)
+                self.ensure_directory_of_file(tgtname)
+                open(tgtname, 'w').write(open(fullname).read())
+                
+    def recursive_filename_match_relative(self, source, pattern):
+        '''
+        Returns all filename in directory source or subdirectories matching pattern.
+        
+        Returns a list of filenames relative to source.
+        '''
+        sourcebase = os.path.normpath(source)+os.path.sep
+        names = []
+        for root, dirnames, filenames in os.walk(source):
+            for filename in fnmatch.filter(filenames, pattern):
+                fullname = os.path.normpath(os.path.join(root, filename))
+                relname = fullname.replace(sourcebase, '')
+                names.append(relname)
+        return names
     
     def set_output_directory(self, path=None):
         if path is None:
@@ -47,8 +94,7 @@ class Implementation(object):
         self.path = path
     
     def ensure_output_directory(self):
-        if not os.path.exists(self.path):
-            os.mkdir(self.path)
+        self.ensure_directory(self.path)
         
     run = make_procedural(brian2.run, runit=False)
     NeuronGroup = make_procedural(brian2.NeuronGroup)

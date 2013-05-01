@@ -3,11 +3,12 @@
 
 // Brian library includes
 #include "brianlib/units.h"
-#include "brianlib/magic.h"
+#include "brianlib/core.h"
+#include "brianlib/groups.h"
 
 // Brian object includes
 {% for obj in objects %}
-#include "{{obj.name}}.h"
+#include "objects/{{obj.name}}.h"
 {% endfor %}
 
 
