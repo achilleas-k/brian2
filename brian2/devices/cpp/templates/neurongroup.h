@@ -1,9 +1,8 @@
+// Brian library includes
 #include "brianlib/neurongroup.h"
 
-//%NAMEDEFS
-// e.g. included here might be:
-// #define CLASSNAME C_neurongroup_0
-// #define OBJNAME neurongroup_0
+#define CLASSNAME C_{{name}}
+#define OBJNAME {{name}}
 
 class CLASSNAME : public NeuronGroup
 {
