@@ -1,22 +1,21 @@
-#ifndef _BRIANOBJECT_H
-#define _BRIANOBJECT_H
+#ifndef _BRIAN_BRIANLIB_CORE_BASE_H
+#define _BRIAN_BRIANLIB_CORE_BASE_H
 
-//TODO: this raises an error, why?
-//#include<string>
+#include <string>
 
-//using namespace std;
+using namespace std;
 
 #include "clocks.h"
 
 class BrianObject
 {
 public:
-	//std::string when;
+	string when;
 	scalar order;
 	Clock &clock;
 	// Constructor
-	BrianObject(/*std::string When,*/ scalar Order, Clock &c) :
-		/*when(When),*/ order(Order), clock(c) {};
+	BrianObject(string When, scalar Order, Clock &c) :
+		when(When), order(Order), clock(c) {};
 	// Methods
 	void prepare() {};
 	void reinit() {};

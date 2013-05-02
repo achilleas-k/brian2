@@ -1,3 +1,6 @@
+#ifndef _BRIAN_TEMPLATES_{{name}}_H
+#define _BRIAN_TEMPLATES_{{name}}_H
+
 // Brian library includes
 #include "brianlib/groups.h"
 #include "brianlib/briantypes.h"
@@ -15,12 +18,12 @@ public:
 	{% for var in variables %}
 	scalar *_array_{{var}};
 	{% endfor %}
-	
+	// Constructor
+	CLASSNAME(string When, scalar Order, Clock &c);	
 	// Methods
-	void _init();
 	void allocate_memory();
 	void deallocate_memory();
 	void state_update();
 };
 
-extern CLASSNAME OBJNAME;
+#endif

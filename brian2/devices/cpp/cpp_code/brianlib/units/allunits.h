@@ -1,6 +1,9 @@
-/*
-Brian standalone units header file
-*/
+#ifndef _BRIAN_BRIANLIB_UNITS_ALLUNITS_H
+#define _BRIAN_BRIANLIB_UNITS_ALLUNITS_H
 
-#define second 1.0
-#define msecond 0.001
+#include "brianlib/briantypes.h"
+
+extern const scalar second;
+extern const scalar msecond;
+
+#endif

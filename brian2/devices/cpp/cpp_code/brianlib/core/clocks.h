@@ -1,5 +1,5 @@
-#ifndef _CLOCKS_H
-#define _CLOCKS_H
+#ifndef _BRIAN_BRIANLIB_CORE_CLOCKS_H
+#define _BRIAN_BRIANLIB_CORE_CLOCKS_H
 
 #include "brianlib/briantypes.h"
 

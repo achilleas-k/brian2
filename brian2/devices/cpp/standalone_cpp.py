@@ -1,10 +1,4 @@
 '''
-
-TODO: need a solution for the problem of initialisation order of global objects,
-      which cannot be guaranteed in C++. One possibility is just to declare
-      the objects when they are actually used rather than using globals.
-      Perhaps this is actually easier?
-
 Notes on C++ implementation of Brian
 ====================================
 
@@ -105,7 +99,7 @@ class CPPImplementation(Implementation):
         self.copy_directory(brianlibdir,
                             os.path.join(self.path, 'brianlib'))
             
-    def template_NeuronGroup(self, obj, f, args, kwds, templates, procedure_lines):
+    def template_NeuronGroup(self, obj, f, args, kwds):
         ns = {'name': obj.name,
               'variables':obj.arrays.keys(),
               'num_neurons':len(obj),
@@ -118,22 +112,26 @@ class CPPImplementation(Implementation):
         tmp_h = ('templates/groups/neurongroup.h',
                  'objects/'+obj.name+'.h',
                  ns)
-        templates.extend([tmp_cpp, tmp_h])
+        self.templates.extend([tmp_cpp, tmp_h])
         proc = self.get_procedure_representation(obj, f, args, kwds)
-        initobj_str = '%s._init(); /* %s */\n'%(obj.name, proc)
-        procedure_lines.append(initobj_str)
+        #initobj_str = '%s._init(); /* %s */\n'%(obj.name, proc)
+        initobj_str = 'C_{name} {name}("{when}", {order}, {clock}); /* {proc} */'.format(
+            name=obj.name, when=obj.when, order=obj.order, clock=obj.clock.name,
+            proc=proc)
+        self.procedure_lines.append(initobj_str)
                     
     def build(self):
         self.ensure_output_directory()
         self.copy_brianlib_files()
         
         # Templates for main.cpp use these
-        procedure_lines = []
+        self.procedure_lines = procedure_lines = []
         objects = []
         ns = {'procedure_lines': procedure_lines,
               'objects': objects,
+              'defaultclock': brian2.defaultclock,
               }
-        templates = [('templates/main.cpp', 'main.cpp', ns)]        
+        self.templates = templates = [('templates/main.cpp', 'main.cpp', ns)]        
         
         # Go through procedures generating templates for referenced objects
         for obj, f, args, kwds in self.procedural_order:
@@ -145,8 +143,7 @@ class CPPImplementation(Implementation):
             if obj is None:
                 procedure_lines.append(proc)
             elif isinstance(obj, brian2.NeuronGroup):
-                self.template_NeuronGroup(obj, f, args, kwds,
-                                          templates, procedure_lines)
+                self.template_NeuronGroup(obj, f, args, kwds)
             else:
                 raise Exception("object unknown")
 

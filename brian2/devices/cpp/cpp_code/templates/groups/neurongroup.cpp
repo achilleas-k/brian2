@@ -2,9 +2,9 @@
 
 #define dt ({{dt}})
 
-void CLASSNAME::_init()
+CLASSNAME::CLASSNAME(string When, scalar Order, Clock &c) :
+	NeuronGroup(When, Order, c)
 {
-	NeuronGroup::_init();
 	_num_neurons = {{num_neurons}};
 }
 
@@ -32,4 +32,4 @@ void CLASSNAME::state_update()
 	{{state_update_code}}
 }
 
-CLASSNAME OBJNAME;
+//CLASSNAME OBJNAME;
