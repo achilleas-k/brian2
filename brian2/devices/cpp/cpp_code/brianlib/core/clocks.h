@@ -1,7 +1,7 @@
 #ifndef _CLOCKS_H
 #define _CLOCKS_H
 
-#include "../briantypes.h"
+#include "brianlib/briantypes.h"
 
 #define clock_epsilon (1.0e-14)
 

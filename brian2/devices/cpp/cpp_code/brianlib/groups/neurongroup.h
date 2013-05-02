@@ -1,7 +1,7 @@
 #ifndef _NEURONGROUP_H
 #define _NEURONGROUP_H
 
-#include "../core/base.h"
+#include "brianlib/core/base.h"
 
 class NeuronGroup //: public BrianObject
 {

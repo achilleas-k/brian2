@@ -1,4 +1,4 @@
-#include "../briantypes.h"
+#include "brianlib/briantypes.h"
 #include<iostream>
 
 using namespace std;
