@@ -1,4 +1,10 @@
 '''
+
+TODO: need a solution for the problem of initialisation order of global objects,
+      which cannot be guaranteed in C++. One possibility is just to declare
+      the objects when they are actually used rather than using globals.
+      Perhaps this is actually easier?
+
 Notes on C++ implementation of Brian
 ====================================
 

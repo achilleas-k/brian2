@@ -1,12 +1,16 @@
 #ifndef _NEURONGROUP_H
 #define _NEURONGROUP_H
 
-class NeuronGroup
+#include "../core/base.h"
+
+class NeuronGroup //: public BrianObject
 {
 public:
-	void _init();
+	// Constructors
+	//NeuronGroup(string When, scalar Order, Clock &c);
 	~NeuronGroup();
-	// Methods which should be overridden
+	// Methods
+	void _init();
 	void state_update() {};
 	void allocate_memory() {};
 	void deallocate_memory() {};

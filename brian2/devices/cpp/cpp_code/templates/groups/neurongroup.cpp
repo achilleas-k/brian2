@@ -1,6 +1,6 @@
 #include "{{name}}.h"
 
-const scalar dt = {{dt}};
+#define dt ({{dt}})
 
 void CLASSNAME::_init()
 {
