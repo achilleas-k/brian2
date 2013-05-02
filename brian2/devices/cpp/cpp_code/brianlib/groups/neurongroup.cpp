@@ -11,3 +11,8 @@ NeuronGroup::~NeuronGroup()
 {
 	deallocate_memory();
 }
+
+void NeuronGroup::update()
+{
+	state_update();
+}

@@ -10,9 +10,10 @@ public:
 	NeuronGroup(string When, scalar Order, Clock &c);
 	~NeuronGroup();
 	// Methods
-	void state_update() {};
+	virtual void state_update() = 0;
 	void allocate_memory() {};
 	void deallocate_memory() {};
+	virtual void update();
 };
 
 #endif

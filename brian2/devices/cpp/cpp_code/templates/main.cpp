@@ -1,3 +1,7 @@
+#include<iostream>
+
+using namespace std;
+
 // Brian library includes
 #include "brianlib/units.h"
 #include "brianlib/core.h"
@@ -17,4 +21,9 @@ int main(int argc, char **argv)
 	{% for procline in procedure_lines %}
 	{{procline}};
 	{% endfor %}
+	
+	// DEBUG STUFF
+	Network net = Network();
+	net.add(neurongroup_0);
+	cout << net.objects.size() << endl;
 }

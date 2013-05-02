@@ -7,6 +7,8 @@ dV/dt = -V/(10*ms) : 1
 
 G = NeuronGroup(10, eqs)
 
+Network(G)
+
 run(100*ms)
 
 build()

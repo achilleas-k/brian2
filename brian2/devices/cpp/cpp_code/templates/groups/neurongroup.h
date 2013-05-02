@@ -23,7 +23,7 @@ public:
 	// Methods
 	void allocate_memory();
 	void deallocate_memory();
-	void state_update();
+	virtual void state_update();
 };
 
 #endif

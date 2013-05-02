@@ -19,6 +19,7 @@ public:
 	// Methods
 	void prepare() {};
 	void reinit() {};
+	virtual void update() = 0;
 	// TODO: active, contained_objects
 };
 
