@@ -46,9 +46,8 @@ class in ``brianlib`` and adds the minimal amount of functionality possible to
 that class. As much as possible should be put in the static library.
 
 Each instance of a templated class should be given a class name ``C_name``
-where ``name`` is replaced by the object's unique name, and the header file
-for that class should define an ``extern C_name name;``. The ``cpp`` file
-for the templated class should define the variable ``name``.
+where ``name`` is replaced by the object's unique name. The object ``name``is
+defined in the ``main()`` function.
 
 Differences between Python version and C++ version
 --------------------------------------------------
@@ -67,6 +66,11 @@ Nameable
 There is no `Nameable` base class, because the name of each object is the
 name of the (global) variable.
 
+Scheduler
+^^^^^^^^^
+
+This class has been removed since it was only used for user-friendliness which
+isn't a problem for the generated code.
 '''
 import os
 import glob
