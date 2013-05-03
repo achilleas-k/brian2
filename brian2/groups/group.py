@@ -37,6 +37,21 @@ class Group(object):
             return spec.get_value() * spec.unit
         except KeyError:
             raise KeyError("Array named "+name+" not found.")
+        
+    def set_state_(self, name, val):
+        '''
+        Sets the unitless array.
+        '''
+        self.specifiers[name].set_value(val)
+    
+    def set_state(self, name, val):
+        '''
+        Sets the array with units.
+        '''
+        spec = self.specifiers[name]
+        fail_for_dimension_mismatch(val, spec.unit,
+                                    'Incorrect units for setting %s' % name)
+        spec.set_value(val)
 
     def __getattr__(self, name):
         # We do this because __setattr__ and __getattr__ are not active until
@@ -68,13 +83,9 @@ class Group(object):
         if not hasattr(self, '_group_attribute_access_active'):
             object.__setattr__(self, name, val)
         elif name in self.specifiers:
-            spec = self.specifiers[name]
-            fail_for_dimension_mismatch(val, spec.unit,
-                                        'Incorrect units for setting %s' % name)
-            spec.set_value(val)
+            self.set_state(name, val)
         elif len(name) and name[-1]=='_' and name[:-1] in self.specifiers:
-            # no unit checking
-            self.specifiers[name[:-1]].set_value(val)
+            self.set_state_(name[:-1], val)
         else:
             object.__setattr__(self, name, val)             
 
