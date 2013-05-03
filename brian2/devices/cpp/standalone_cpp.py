@@ -79,7 +79,8 @@ from collections import defaultdict
 from jinja2 import Template
 
 import brian2
-from brian2.devices.standalone_base import Implementation
+from brian2.devices.standalone_base import (Implementation, Handler,
+                                            MethodHandler)
 from brian2.codegen import set_default_language
 from brian2.codegen.languages.cpp import CPPLanguage
 from brian2.devices.methodlogger import method_logger, MethodCall
@@ -98,48 +99,65 @@ codedir = os.path.join(curdir, 'cpp_code')
 brianlibdir = os.path.join(codedir, 'brianlib')
 templatedir = os.path.join(codedir, 'templates')
 
-class CPPImplementation(Implementation):
-    def __init__(self):
-        Implementation.__init__(self)
-        self.register_class(brian2.NeuronGroup, __all__, globals(),
-                            methnames=set(['__init__',
-                                           #'set_state_', 'state_',
-                                           #'set_state', 'state',
-                                           ]),
-                            )
-        self.register_function(brian2.run, __all__, globals(), runit=False)
-                
-    def copy_brianlib_files(self):
-        self.copy_directory(brianlibdir,
-                            os.path.join(self.path, 'brianlib'))
-            
-    def template_NeuronGroup(self, obj, f, args, kwds):
+class NeuronGroupHandler(MethodHandler):
+    handle_class = brian2.NeuronGroup
+    method_names = set(['__init__',
+                        #'set_state_', 'state_',
+                        #'set_state', 'state',
+                        ])
+    def _get_template_namespace(self, obj):
         ns = {'name': obj.name,
               'variables':obj.arrays.keys(),
               'num_neurons':len(obj),
               'state_update_code':obj.state_updater.codeobj.code['%MAIN%'],
               'dt':float(obj.clock.dt),
               }
+        return ns
+    
+    def init(self, proc):
+        obj = proc.obj
+        f = proc.meth
+        args = proc.args
+        kwds = proc.kwds
+        ns = self._get_template_namespace(obj)
         tmp_cpp = ('templates/groups/neurongroup.cpp',
                    'objects/'+obj.name+'.cpp',
                    ns)
         tmp_h = ('templates/groups/neurongroup.h',
                  'objects/'+obj.name+'.h',
                  ns)
-        self.templates.extend([tmp_cpp, tmp_h])
-        proc = self.get_procedure_representation(obj, f, args, kwds)
-        initobj_str = 'C_{name} {name}("{when}", {order}, {clock}); /* {proc} */'.format(
-            name=obj.name, when=obj.when, order=obj.order, clock=obj.clock.name,
-            proc=proc)
-        self.procedure_lines.append(initobj_str)
-                    
+        self.implementation.templates.extend([tmp_cpp, tmp_h])
+        initobj_str = 'C_{name} {name}("{when}", {order}, {clock})'.format(
+            name=obj.name, when=obj.when, order=obj.order, clock=obj.clock.name)
+        self.implementation.procedure_lines.append(initobj_str)
+            
+
+class RunHandler(Handler):
+    handle_function = brian2.run
+    runit = False
+    def __call__(self, proc):
+        self.implementation.procedure_lines.append(proc.call_representation)
+
+
+class CPPImplementation(Implementation):
+    class_handlers = [NeuronGroupHandler]
+    function_handlers = [RunHandler]
+    
+    def __init__(self):
+        Implementation.__init__(self)
+        self.registration(__all__, globals())
+                        
+    def copy_brianlib_files(self):
+        self.copy_directory(brianlibdir,
+                            os.path.join(self.path, 'brianlib'))
+                                
     def build(self):
         self.ensure_output_directory()
         self.copy_brianlib_files()
         
         # Templates for main.cpp use these
         self.procedure_lines = procedure_lines = []
-        objects = []
+        objects = set()
         ns = {'procedure_lines': procedure_lines,
               'objects': objects,
               'defaultclock': brian2.defaultclock,
@@ -148,17 +166,13 @@ class CPPImplementation(Implementation):
         
         # Go through procedures generating templates for referenced objects
         for proc in self.procedural_order:
-            if isinstance(proc, MethodCall) and proc.objclass is brian2.NeuronGroup and proc.methname=='__init__':
-                self.template_NeuronGroup(proc.obj, brian2.NeuronGroup,
-                                          proc.args, proc.kwds)
-                objects.append(proc.obj)
-            elif isinstance(proc, FunctionCall):
-                self.procedure_lines.append(proc.call_representation)
+            for v in [proc.returnval, getattr(proc, 'obj', None)]:
+                if isinstance(v, brian2.Nameable):
+                    objects.add(v)
+            if proc.handlekey in self.handlers:
+                self.handlers[proc.handlekey](proc)
             else:
-                raise Exception("Don't know what to do with "+repr(proc))
-            
-            if proc.returnval is not None:
-                objects.append(proc.returnval)
+                raise Exception("What to do with this? "+repr(proc))
 
         # Write out templated files
         for inputname, outputname, ns in templates:

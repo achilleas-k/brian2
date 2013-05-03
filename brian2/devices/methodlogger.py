@@ -20,6 +20,7 @@ class MethodCall(object):
         self.args = args #: The arguments passed to the method
         self.kwds = kwds #: The keywords passed to the method
         self.methname = meth.__name__ #: The name of the method
+        self.handlekey = self.objclass #: The key used for handlers
         
         if hasattr(obj, 'name'):
             self.objname = obj.name #: The unique Brian name of the object, or UNKNOWN

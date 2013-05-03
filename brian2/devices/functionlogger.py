@@ -7,6 +7,7 @@ class FunctionCall(object):
         self.funcname = func.__name__ #: The name of the function
         self.args = args #: Arguments passed to function
         self.kwds = kwds #: Keywords passed to function
+        self.handlekey = func #: The key used for handlers
 
         argstr = ', '.join(repr(arg) for arg in self.args)
         kwdstr = ', '.join(k+'='+repr(v) for k, v in self.kwds.items())

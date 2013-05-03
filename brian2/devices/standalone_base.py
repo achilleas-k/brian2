@@ -19,26 +19,56 @@ from brian2.devices.methodlogger import method_logger, MethodCall
 from brian2.devices.functionlogger import function_logger, FunctionCall
 
 __all__ = [# Package classes and functions
-           'Implementation',
+           'Implementation', 'Handler', 'MethodHandler',
            ]
 
-def make_procedural(original_func, runit=True):
-    def new_func(self, *args, **kwds):
-        if runit:
-            obj = original_func(*args, **kwds)
-            self.procedural_order.append((obj, original_func, args, kwds))
-            return obj
+class Handler(object):
+    def __init__(self, implementation):
+        self.implementation = implementation
+        
+class MethodHandler(Handler):
+    def __call__(self, proc):
+        if proc.methname=='__init__':
+            self.init(proc)
         else:
-            self.procedural_order.append((None, original_func, args, kwds))
-    return new_func
+            getattr(self, proc.methname)(proc)
+
 
 class Implementation(object):
     '''
     The base class for all standalone Brian implementations.
     '''
+    class_handlers = []
+    function_handlers = []
+
     def __init__(self):
         self.procedural_order = []
+        self.handlers = {}
         self.set_output_directory()
+
+    def registration(self, all, ns):
+        '''
+        Handles registration of method and function call handlers
+        
+        Must be called from the implementation module with its ``__all__``
+        and ``globals()``.
+        
+        Parameters
+        ----------
+        
+        all : list
+            The ``__all__`` list of the implementation module.
+        ns : dict
+            The ``globals()`` of the implementation module.
+        '''
+        for handler in self.class_handlers:
+            self.register_class(handler.handle_class, all, ns,
+                                methnames=handler.method_names)
+            self.handlers[handler.handle_class] = handler(self)
+        for handler in self.function_handlers:
+            self.register_function(handler.handle_function, all, ns,
+                                   runit=handler.runit)
+            self.handlers[handler.handle_function] = handler(self)
 
     def register_class(self, cls, all, ns, methnames=None):
         '''
@@ -142,20 +172,6 @@ class Implementation(object):
     def ensure_output_directory(self):
         self.ensure_directory(self.path)
         
-#    run = make_procedural(brian2.run, runit=False)
-#    NeuronGroup = make_procedural(brian2.NeuronGroup)
-
-    def get_procedure_representation(self, obj, f, args, kwds):
-        argstr = ', '.join(repr(arg) for arg in args)
-        kwdstr = ', '.join(k+'='+repr(v) for k, v in kwds.items())
-        m = []
-        if argstr:
-            m.append(argstr)
-        if kwdstr:
-            m.append(kwdstr)
-        proc = '%s(%s)'%(f.__name__, ', '.join(m))
-        return proc
-    
     def build(self):
         self.ensure_output_directory()
         with open(os.path.join(self.path, 'main.txt'), 'w') as file:
