@@ -15,13 +15,11 @@ Ideas and questions
 import brian2
 import os
 import fnmatch
+from brian2.devices.methodlogger import method_logger, MethodCall
+from brian2.devices.functionlogger import function_logger, FunctionCall
 
 __all__ = [# Package classes and functions
            'Implementation',
-           # Original Brian objects and functions
-           'run', 'NeuronGroup',
-           # Device specific objects and functions
-           'build',
            ]
 
 def make_procedural(original_func, runit=True):
@@ -41,6 +39,54 @@ class Implementation(object):
     def __init__(self):
         self.procedural_order = []
         self.set_output_directory()
+
+    def register_class(self, cls, all, ns, methnames=None):
+        '''
+        Register a class to log its method calls into `procedural_order`
+        
+        Inserts the newly created class, derived from the original class, into
+        the global namespace of the calling module, adds it to the ``__all__``
+        list so that it will be imported when that module is imported.
+        
+        Parameters
+        ----------
+        
+        cls : class
+            The class to log method calls
+        all : list
+            The ``__all__`` list of the module.
+        ns : dict
+            The ``globals()`` dict of the module.
+        methnames : None or set
+            The set of method names to log.
+        '''
+        all.append(cls.__name__)
+        newcls = method_logger(cls, self.procedural_order, methnames=methnames)
+        ns[cls.__name__] = newcls
+        
+    def register_function(self, func, all, ns, runit=True):
+        '''
+        Register a function to log its calls into `procedural_order`
+
+        Inserts the newly created function into
+        the global namespace of the calling module, adds it to the ``__all__``
+        list so that it will be imported when that module is imported.
+
+        Parameters
+        ----------
+        
+        func : function
+            The function whose calls to log.
+        all : list
+            The ``__all__`` list of the module.
+        ns : dict
+            The ``globals()`` dict of the module.
+        runit : bool
+            Whether or not to run the function.
+        '''
+        all.append(func.__name__)
+        newfunc = function_logger(func, self.procedural_order, runit=runit)
+        ns[func.__name__] = newfunc
 
     def ensure_directory(self, d):
         '''
@@ -96,8 +142,8 @@ class Implementation(object):
     def ensure_output_directory(self):
         self.ensure_directory(self.path)
         
-    run = make_procedural(brian2.run, runit=False)
-    NeuronGroup = make_procedural(brian2.NeuronGroup)
+#    run = make_procedural(brian2.run, runit=False)
+#    NeuronGroup = make_procedural(brian2.NeuronGroup)
 
     def get_procedure_representation(self, obj, f, args, kwds):
         argstr = ', '.join(repr(arg) for arg in args)
@@ -121,9 +167,3 @@ class Implementation(object):
                     with open(os.path.join(self.path, obj.name+'.txt'), 'w') as file2:
                         file2.write(definition+'\n')
                 file.write(proc+'\n')
-
-implementation = Implementation()
-
-run = implementation.run
-NeuronGroup = implementation.NeuronGroup
-build = implementation.build
