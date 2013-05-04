@@ -13,13 +13,13 @@
 class CLASSNAME : public NeuronGroup
 {
 public:
-	int _num_neurons;
 	// Array memory
 	{% for var in variables %}
 	scalar *_array_{{var}};
 	{% endfor %}
 	// Constructor
-	CLASSNAME(string When, scalar Order, Clock &c);	
+	CLASSNAME(string When, scalar Order, Clock &c, int N);
+	~CLASSNAME();
 	// Methods
 	void allocate_memory();
 	void deallocate_memory();

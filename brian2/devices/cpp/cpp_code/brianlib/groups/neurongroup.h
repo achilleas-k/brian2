@@ -1,19 +1,25 @@
 #ifndef _BRIAN_BRIANLIB_GROUPS_NEURONGROUP_H
 #define _BRIAN_BRIANLIB_GROUPS_NEURONGROUP_H
 
+#include<list>
+#include<string>
+
+using namespace std;
+
 #include "brianlib/core/base.h"
+#include "brianlib/briancpputil.h"
 
 class NeuronGroup : public BrianObject
 {
 public:
+	int _num_neurons;
+	unordered_map<string, scalar*> arrays;
 	// Constructors
-	NeuronGroup(string When, scalar Order, Clock &c);
-	~NeuronGroup();
+	NeuronGroup(string When, scalar Order, Clock &c, int N);
 	// Methods
 	virtual void state_update() = 0;
-	void allocate_memory() {};
-	void deallocate_memory() {};
 	virtual void update();
+	void set_state(string name, scalar value);
 };
 
 #endif

@@ -2,10 +2,15 @@
 
 #define dt ({{dt}})
 
-CLASSNAME::CLASSNAME(string When, scalar Order, Clock &c) :
-	NeuronGroup(When, Order, c)
+CLASSNAME::CLASSNAME(string When, scalar Order, Clock &c, int N) :
+		NeuronGroup(When, Order, c, N)
 {
-	_num_neurons = {{num_neurons}};
+	allocate_memory();
+}
+
+CLASSNAME::~CLASSNAME()
+{
+	deallocate_memory();
 }
 
 void CLASSNAME::allocate_memory()
@@ -13,6 +18,7 @@ void CLASSNAME::allocate_memory()
 	// TODO: check for memory allocation failures and raise exception
 	{% for var in variables %}
 	_array_{{var}} = new scalar [_num_neurons];
+	arrays[{{'"'+var+'"'}}] = _array_{{var}};
 	{% endfor %}
 }
 
@@ -25,11 +31,10 @@ void CLASSNAME::deallocate_memory()
 		_array_{{var}} = 0;
 	}
 	{% endfor %}
+	arrays.clear();
 }
 
 void CLASSNAME::state_update()
 {
 	{{state_update_code}}
 }
-
-//CLASSNAME OBJNAME;

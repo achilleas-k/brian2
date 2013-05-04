@@ -78,6 +78,8 @@ from collections import defaultdict
 
 from jinja2 import Template
 
+import numpy
+
 import brian2
 from brian2.devices.standalone_base import (Implementation, Handler,
                                             MethodHandler)
@@ -102,8 +104,8 @@ templatedir = os.path.join(codedir, 'templates')
 class NeuronGroupHandler(MethodHandler):
     handle_class = brian2.NeuronGroup
     method_names = set(['__init__',
-                        #'set_state_', 'state_',
-                        #'set_state', 'state',
+                        'set_state_', 'state_',
+                        'set_state', 'state',
                         ])
     def _get_template_namespace(self, obj):
         ns = {'name': obj.name,
@@ -116,9 +118,6 @@ class NeuronGroupHandler(MethodHandler):
     
     def init(self, proc):
         obj = proc.obj
-        f = proc.meth
-        args = proc.args
-        kwds = proc.kwds
         ns = self._get_template_namespace(obj)
         tmp_cpp = ('templates/groups/neurongroup.cpp',
                    'objects/'+obj.name+'.cpp',
@@ -127,10 +126,21 @@ class NeuronGroupHandler(MethodHandler):
                  'objects/'+obj.name+'.h',
                  ns)
         self.implementation.templates.extend([tmp_cpp, tmp_h])
-        initobj_str = 'C_{name} {name}("{when}", {order}, {clock})'.format(
-            name=obj.name, when=obj.when, order=obj.order, clock=obj.clock.name)
+        initobj_str = 'C_{name} {name}("{when}", {order}, {clock}, {N});'.format(
+                        name=obj.name, when=obj.when, order=obj.order,
+                       clock=obj.clock.name, N=len(obj),
+                       )
         self.implementation.procedure_lines.append(initobj_str)
-            
+        
+    def set_state(self, proc):
+        name, val = proc.args
+        if isinstance(val, (str, numpy.ndarray)):
+            raise ValueError("Can only handle scalar values for now.")
+        val = float(val)
+        line = '{obj}.set_state("{var}", {val});'.format(obj=proc.objname,
+                                                       var=name, val=val)
+        self.implementation.procedure_lines.append(line)
+
 
 class RunHandler(Handler):
     handle_function = brian2.run
@@ -189,7 +199,7 @@ class CPPImplementation(Implementation):
         cpp_files = [f.replace('\\', '/') for f in cpp_files]
         open(os.path.join(self.path, 'makefile'), 'w').write('''
 all:
-\tg++ -I. {names} -o runsim
+\tg++ -I. -std=c++0x {names} -o runsim
         '''.format(names=' '.join(cpp_files)))
 
 implementation = CPPImplementation()
