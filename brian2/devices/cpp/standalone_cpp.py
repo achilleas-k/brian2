@@ -91,7 +91,7 @@ from brian2.devices.functionlogger import function_logger, FunctionCall
 __all__ = [# Package classes and functions
            'CPPImplementation',
            # Device specific objects and functions
-           'build',
+           'build', 'insert_code',
            ]
 
 set_default_language(CPPLanguage())
@@ -103,10 +103,9 @@ templatedir = os.path.join(codedir, 'templates')
 
 class NeuronGroupHandler(MethodHandler):
     handle_class = brian2.NeuronGroup
-    method_names = set(['__init__',
-                        'set_state_', 'state_',
-                        'set_state', 'state',
-                        ])
+    method_names = {'__init__':True,
+                    'set_state_':True, 'set_state':True,
+                    }
     def _get_template_namespace(self, obj):
         ns = {'name': obj.name,
               'variables':obj.arrays.keys(),
@@ -140,6 +139,7 @@ class NeuronGroupHandler(MethodHandler):
         line = '{obj}.set_state("{var}", {val});'.format(obj=proc.objname,
                                                        var=name, val=val)
         self.implementation.procedure_lines.append(line)
+    set_state_ = set_state
 
 
 class RunHandler(Handler):
@@ -148,7 +148,7 @@ class RunHandler(Handler):
     def __call__(self, proc):
         self.implementation.procedure_lines.append(proc.call_representation)
 
-
+        
 class CPPImplementation(Implementation):
     class_handlers = [NeuronGroupHandler]
     function_handlers = [RunHandler]
@@ -176,10 +176,12 @@ class CPPImplementation(Implementation):
         
         # Go through procedures generating templates for referenced objects
         for proc in self.procedural_order:
-            for v in [proc.returnval, getattr(proc, 'obj', None)]:
+            for v in [getattr(proc, 'returnval', None), getattr(proc, 'obj', None)]:
                 if isinstance(v, brian2.Nameable):
                     objects.add(v)
-            if proc.handlekey in self.handlers:
+            if isinstance(proc, str):
+                self.procedure_lines.append(proc)
+            elif proc.handlekey in self.handlers:
                 self.handlers[proc.handlekey](proc)
             else:
                 raise Exception("What to do with this? "+repr(proc))
@@ -201,10 +203,17 @@ class CPPImplementation(Implementation):
 all:
 \tg++ -I. -std=c++0x {names} -o runsim
         '''.format(names=' '.join(cpp_files)))
+        
+    def insert_code(self, code):
+        '''
+        Inserts C++ code directly into the main function.
+        '''
+        self.procedural_order.append(code)
 
 implementation = CPPImplementation()
 
 build = implementation.build
+insert_code = implementation.insert_code
 
 if __name__=='__main__':
     print templatedir

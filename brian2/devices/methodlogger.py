@@ -60,13 +60,19 @@ class CallLogger(object):
         The method.
     target : list
         A list to append method calls to.
+    runit : bool
+        Whether or not to run the method.
     '''
-    def __init__(self, obj, meth, target):
+    def __init__(self, obj, meth, target, runit=True):
         self.obj = obj
         self.meth = meth
         self.target = target
+        self.runit = runit
     def __call__(self, *args, **kwds):
-        rv = self.meth(*args, **kwds)
+        if self.runit:
+            rv = self.meth(*args, **kwds)
+        else:
+            rv = None
         mc = MethodCall(rv, self.obj, self.meth, args, kwds)
         self.target.append(mc)
         return rv
@@ -86,8 +92,10 @@ def method_logger(origclass, target, methnames=None):
     target : list
         An empty list to place the logged method calls in. Each item inserted
         will be of type `MethodCall`.
-    methnames : None or set
-        A set of methodnames to log, or None to log all (you will get a lot!).
+    methnames : None or dict
+        A dict of pairs ``(methodname, runit)`` to log, or None to log all
+        (you will get a lot!). The ``runit`` is a boolean flag indicating
+        whether or not to run the method.
         
     Returns
     -------
@@ -95,6 +103,11 @@ def method_logger(origclass, target, methnames=None):
     A new class derived from ``origclass`` that will log all the specified
     method calls.
     '''
+    def runit(name):
+        if methnames is None:
+            return True
+        else:
+            return methnames[name]
     class MethodLogger(origclass):
         _original_class = origclass
         # Have to handle __init__ method separately
@@ -102,15 +115,13 @@ def method_logger(origclass, target, methnames=None):
             origclass.__init__(self, *args, **kwds)
             if methnames is None or '__init__' in methnames:
                 cl = self.__init__
-                mc = MethodCall(None, self,
-                                cl.meth,
-                                args, kwds)
+                mc = MethodCall(None, self, cl.meth, args, kwds)
                 target.append(mc)
         def __getattribute__(self, name):
             obj = origclass.__getattribute__(self, name)
             if inspect.ismethod(obj):
                 if methnames is None or name in methnames:
-                    obj = CallLogger(self, obj, target)
+                    obj = CallLogger(self, obj, target, runit=runit(name))
             return obj
     MethodLogger.__name__ = origclass.__name__
     return MethodLogger
@@ -120,11 +131,12 @@ if __name__=='__main__':
     from brian2 import *
     logged = []    
     NeuronGroup = method_logger(NeuronGroup, logged,
-                                methnames=set(['set_state', 'state', '__init__'])
+                                methnames={'set_state': True, 'state': True,
+                                           '__init__':True},
                                 )
     G = NeuronGroup(1, 'v:1')
     G.v = 1
-    G.v
+    print G.v
     for mc in logged:
         print mc.objclass, mc
     #run(10*ms)

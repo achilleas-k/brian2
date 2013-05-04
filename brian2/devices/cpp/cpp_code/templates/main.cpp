@@ -20,10 +20,5 @@ int main(int argc, char **argv)
 	// Main procedures
 	{% for procline in procedure_lines %}
 	{{procline}};
-	{% endfor %}
-	
-	// DEBUG STUFF
-	Network net = Network();
-	net.add(neurongroup_0);
-	cout << net.objects.size() << endl;
+	{% endfor %}	
 }
