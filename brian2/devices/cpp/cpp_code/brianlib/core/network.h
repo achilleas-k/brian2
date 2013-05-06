@@ -12,6 +12,7 @@ public:
 	list<BrianObject*> objects;
 	// Methods
 	void add(BrianObject &obj);
+	void run(scalar duration);
 };
 
 #endif

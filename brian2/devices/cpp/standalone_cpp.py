@@ -125,6 +125,7 @@ class NeuronGroupHandler(MethodHandler):
                  'objects/'+obj.name+'.h',
                  ns)
         self.implementation.templates.extend([tmp_cpp, tmp_h])
+        self.implementation.additional_headers.append('objects/'+obj.name+'.h')
         initobj_str = 'C_{name} {name}("{when}", {order}, {clock}, {N});'.format(
                         name=obj.name, when=obj.when, order=obj.order,
                        clock=obj.clock.name, N=len(obj),
@@ -142,6 +143,24 @@ class NeuronGroupHandler(MethodHandler):
     set_state_ = set_state
 
 
+class NetworkHandler(MethodHandler):
+    handle_class = brian2.Network
+    method_names = {'__init__': True,
+                    'run': False,
+                    }
+    def init(self, proc):
+        code = 'Network {name};\n'.format(name=proc.obj.name)
+        for obj in proc.args:
+            code += '{name}.add({obj_name});\n'.format(name=proc.obj.name,
+                                                       obj_name=obj.name)
+        self.implementation.procedure_lines.append(code)
+    
+    def run(self, proc):
+        code = '{name}.run({duration})'.format(name=proc.obj.name,
+                                               duration=repr(proc.args[0]))
+        self.implementation.procedure_lines.append(code)
+
+
 class RunHandler(Handler):
     handle_function = brian2.run
     runit = False
@@ -150,7 +169,7 @@ class RunHandler(Handler):
 
         
 class CPPImplementation(Implementation):
-    class_handlers = [NeuronGroupHandler]
+    class_handlers = [NeuronGroupHandler, NetworkHandler]
     function_handlers = [RunHandler]
     
     def __init__(self):
@@ -167,12 +186,14 @@ class CPPImplementation(Implementation):
         
         # Templates for main.cpp use these
         self.procedure_lines = procedure_lines = []
+        self.additional_headers = []  
         objects = set()
         ns = {'procedure_lines': procedure_lines,
               'objects': objects,
+              'headers': self.additional_headers,
               'defaultclock': brian2.defaultclock,
               }
-        self.templates = templates = [('templates/main.cpp', 'main.cpp', ns)]        
+        self.templates = templates = [('templates/main.cpp', 'main.cpp', ns)]
         
         # Go through procedures generating templates for referenced objects
         for proc in self.procedural_order:

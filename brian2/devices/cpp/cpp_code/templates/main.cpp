@@ -7,9 +7,9 @@ using namespace std;
 #include "brianlib/core.h"
 #include "brianlib/groups.h"
 
-// Brian object includes
-{% for obj in objects %}
-#include "objects/{{obj.name}}.h"
+// Brian extra includes
+{% for header in headers %}
+#include "{{header}}"
 {% endfor %}
 
 int main(int argc, char **argv)

@@ -10,20 +10,11 @@ G.V = 1
 
 net = Network(G)
 
-run(100*ms)
+net.run(100*ms)
 
 insert_code('''
-    for(scalar t=0.0; t<100*ms; t+=defaultclock.dt)
-    {
-        neurongroup_0.state_update();
-    }
+    cout << "Next two lines should be the same:\\n4.31712e-005\\n";
     cout << neurongroup_0.arrays["V"][0] << endl;
-
-    // DEBUG STUFF
-    Network net = Network();
-    net.add(neurongroup_0);
-    cout << net.objects.size() << endl;
-
 ''')
 
 build()
