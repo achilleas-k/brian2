@@ -1,5 +1,5 @@
-#ifndef _BRIAN_TEMPLATES_{{name}}_H
-#define _BRIAN_TEMPLATES_{{name}}_H
+#ifndef _BRIAN_TEMPLATES_{{objname}}_H
+#define _BRIAN_TEMPLATES_{{objname}}_H
 
 // Brian library includes
 #include "brianlib/groups.h"
@@ -7,14 +7,14 @@
 #include "brianlib/units.h"
 #include "brianlib/core.h"
 
-#define CLASSNAME C_{{name}}
-#define OBJNAME {{name}}
+#define CLASSNAME C_{{objname}}
+#define OBJNAME {{objname}}
 
 class CLASSNAME : public NeuronGroup
 {
 public:
 	// Array memory
-	{% for var in variables %}
+	{% for var in obj.arrays.keys() %}
 	scalar *_array_{{var}};
 	{% endfor %}
 	// Constructor

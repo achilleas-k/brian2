@@ -75,6 +75,7 @@ isn't a problem for the generated code.
 import os
 import glob
 from collections import defaultdict
+import inspect
 
 from jinja2 import Template
 
@@ -101,66 +102,179 @@ codedir = os.path.join(curdir, 'cpp_code')
 brianlibdir = os.path.join(codedir, 'brianlib')
 templatedir = os.path.join(codedir, 'templates')
 
-class NeuronGroupHandler(MethodHandler):
+class CPPMethodHandlerMethod(object):
+    '''
+    This class is used for runtime generated methods for the `CPPMethodHandler` class.
+    
+    It is called with the ``proc`` `MethodCall` argument by `CPPImplementation`,
+    and handles inserting lines into the main.cpp file and creating templated
+    files corresponding to each object. See `CPPMethodHandler` for more details.
+    
+    When called with ``proc`` it tries to find a matching template file::
+    
+        templatedir/basename.methodname.cpp
+        
+    This template will be rendered with the namespace defined by
+    ``proc.__dict__`` and (optionally, if one exists) the namespace returned by
+    ``handler._namespace(proc)``. The rendered template will be inserted
+    directly into the main.cpp file. If the method is the
+    ``__init__`` method, then it will additionally search for the following
+    template files::
+    
+        templatedir/basename.cpp
+        templatedir/basename.h
+    
+    Parameters
+    ----------
+    
+    handler : MethodHandler
+        The main handler class which this method will be attached to.
+    name : str
+        The name of the method.
+    orig : method
+        The original method (if there was one), which can be used to do extra
+        work beyond what the automatic handling does.
+    basename : str
+        The base filename of template definitions for this class/method.
+    '''
+    def __init__(self, handler, name, orig, basename):
+        self.handler = handler
+        self.implementation = handler.implementation
+        self.name = name
+        self.orig = orig
+        self.basename = basename
+    def __call__(self, proc):
+        # Call the original Handler's method first if it has one, it may
+        # raise errors or modify proc.
+        if self.orig is not None:
+            self.orig(proc)
+        ns = proc.__dict__.copy()
+        if hasattr(self.handler, '_namespace'):
+            ns.update(self.handler._namespace(proc))
+        # Try to load the file which should be inserted into main.cpp
+        if self.name=='init':
+            dotname = '__init__'
+        else:
+            dotname = self.name
+        tmpfn = os.path.join(templatedir,
+                             self.basename+'.'+dotname+'.cpp')
+        if os.path.exists(tmpfn):
+            tmpstr = open(tmpfn, 'r').read()
+            tmp = Template(tmpstr)
+            outstr = tmp.render(**ns)
+            self.implementation.procedure_lines.append(outstr)
+        # If this is the init method, try to load the class template
+        if dotname=='__init__':
+            for ext in ['cpp', 'h']:
+                tmpfn = os.path.join(templatedir, self.basename+'.'+ext)
+                if os.path.exists(tmpfn):
+                    tmpstr = open(tmpfn, 'r').read()
+                    tmp = (os.path.join('templates', self.basename+'.'+ext),
+                           'objects/'+proc.obj.name+'.'+ext,
+                           ns)
+                    self.implementation.templates.append(tmp)
+                    if ext=='h':
+                        self.implementation.additional_headers.append('objects/'+proc.obj.name+'.h')
+                    
+
+class CPPMethodHandler(MethodHandler):
+    '''
+    Handles translation of method calls on objects into standalone code.
+    
+    This class is designed to be derived from. You should define two class
+    attributes:
+    
+    ``handle_class`` : class
+        The Brian class which is being handled by this object.
+    ``method_names`` : dict
+        A dictionary of pairs ``(name, runit)`` giving the names of the methods
+        to be handled, and whether or not the method should actually be called
+        or only translated into code. For example ``run`` methods shouldn't
+        usually be called, but other methods might.
+        
+    The class will automatically handle translation of code in the following
+    way. It computes a base filename for template files, this base filename
+    consists of the source filename of the Brian class relative to the
+    Brian package directory, e.g. for `NeuronGroup` it would be
+    ``groups/neurongroup``. The full base name is then::
+    
+        basefilename.classname
+        
+    So for `NeuronGroup` it would be ``groups/neurongroup.NeuronGroup``.
+    Now all the template files will be stored in the template directory,
+    followed by this name, followed by various values. If you want to provide
+    a full template for the whole class (with various methods, etc.) then
+    create files::
+    
+        templates/basename.cpp
+        templates/basename.h
+        
+    If you want to provide code that will be inserted into the ``main.cpp``
+    at the place corresponding to the method call, then create a template file::
+    
+        templates/basename.methodname.cpp
+        
+    See `CPPMethodHandlerMethod` for more details.
+    
+    By default, the template files are considered as Jinja template files,
+    with a namespace based on the dict of the `MethodCall` object. If in
+    addition the `CPPMethodHandler` class defines a ``_namespace(proc)`` method
+    then the namespace returned by this will be added to the namespace used by
+    Jinja to render it. The ``proc`` argument is the `MethodCall` object.
+    
+    If in addition to the default templating behaviour you want to add some
+    additional code, you can create a method with the same name as the method
+    you are tracking (e.g. ``set_state`` for `NeuronGroup`) taking one argument,
+    the ``proc`` object. This method can do things like adding to the ``proc``
+    object to provide additional namespace data, or raising an error if the
+    arguments are not supported, etc.
+    
+    Parameters
+    ----------
+    
+    implementation : CPPImplementation
+        The main `CPPImplementation` object (provided automatically).
+    '''
+    def __init__(self, implementation):
+        MethodHandler.__init__(self, implementation)
+        # Find the base file name for templates, etc.
+        classfilename = inspect.getsourcefile(self.handle_class)
+        brian2filename = inspect.getsourcefile(brian2).replace('__init__.py', '')
+        # remove the brian2 common part and the .py at the end
+        self.basename = classfilename.replace(brian2filename, '')[:-3]+'.'+self.handle_class.__name__
+        # Set up methods
+        for name in self.method_names.keys():
+            if name=='__init__':
+                name = 'init'
+            # We keep the currently existing method because it might do stuff
+            # like adding things to proc, or raising errors, that cannot be
+            # handled automatically with template files.
+            orig = getattr(self, name, None)
+            setattr(self, name, CPPMethodHandlerMethod(self, name, orig,
+                                                        self.basename))
+
+
+class NeuronGroupHandler(CPPMethodHandler):
     handle_class = brian2.NeuronGroup
     method_names = {'__init__':True,
                     'set_state_':True, 'set_state':True,
                     }
-    def _get_template_namespace(self, obj):
-        ns = {'name': obj.name,
-              'variables':obj.arrays.keys(),
-              'num_neurons':len(obj),
-              'state_update_code':obj.state_updater.codeobj.code['%MAIN%'],
-              'dt':float(obj.clock.dt),
-              }
-        return ns
-    
-    def init(self, proc):
-        obj = proc.obj
-        ns = self._get_template_namespace(obj)
-        tmp_cpp = ('templates/groups/neurongroup.cpp',
-                   'objects/'+obj.name+'.cpp',
-                   ns)
-        tmp_h = ('templates/groups/neurongroup.h',
-                 'objects/'+obj.name+'.h',
-                 ns)
-        self.implementation.templates.extend([tmp_cpp, tmp_h])
-        self.implementation.additional_headers.append('objects/'+obj.name+'.h')
-        initobj_str = 'C_{name} {name}("{when}", {order}, {clock}, {N});'.format(
-                        name=obj.name, when=obj.when, order=obj.order,
-                       clock=obj.clock.name, N=len(obj),
-                       )
-        self.implementation.procedure_lines.append(initobj_str)
-        
     def set_state(self, proc):
-        name, val = proc.args
+        var, val = proc.args
         if isinstance(val, (str, numpy.ndarray)):
             raise ValueError("Can only handle scalar values for now.")
-        val = float(val)
-        line = '{obj}.set_state("{var}", {val});'.format(obj=proc.objname,
-                                                       var=name, val=val)
-        self.implementation.procedure_lines.append(line)
-    set_state_ = set_state
+    def set_state_(self, proc):
+        return self.set_state(proc)
 
-
-class NetworkHandler(MethodHandler):
+        
+class NetworkHandler(CPPMethodHandler):
     handle_class = brian2.Network
     method_names = {'__init__': True,
                     'run': False,
                     }
-    def init(self, proc):
-        code = 'Network {name};\n'.format(name=proc.obj.name)
-        for obj in proc.args:
-            code += '{name}.add({obj_name});\n'.format(name=proc.obj.name,
-                                                       obj_name=obj.name)
-        self.implementation.procedure_lines.append(code)
-    
-    def run(self, proc):
-        code = '{name}.run({duration})'.format(name=proc.obj.name,
-                                               duration=repr(proc.args[0]))
-        self.implementation.procedure_lines.append(code)
 
 
+# TODO: make RunHandler work like CPPMethodHandler
 class RunHandler(Handler):
     handle_function = brian2.run
     runit = False
@@ -168,6 +282,9 @@ class RunHandler(Handler):
         self.implementation.procedure_lines.append(proc.call_representation)
 
         
+# TODO: add methods to add code to main.cpp and to add templates to render,
+# this will make it all much clearer than directly adding to .procedure_lines,
+# and so forth.
 class CPPImplementation(Implementation):
     class_handlers = [NeuronGroupHandler, NetworkHandler]
     function_handlers = [RunHandler]
