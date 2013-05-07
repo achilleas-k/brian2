@@ -14,13 +14,14 @@ The input information needed:
 * The dtype to use for newly created variables
 * The language to translate to
 '''
-import re
+from numpy import float64
 
 from brian2.core.specifiers import Value, ArrayVariable, Subexpression, Index
 from brian2.utils.stringtools import (deindent, strip_empty_lines, indent,
                                       get_identifiers)
 
 from .statements import Statement
+from .parsing import parse_statement
 
 __all__ = ['translate', 'make_statements']
 
@@ -33,6 +34,49 @@ class LineInfo(object):
     def __init__(self, **kwds):
         for k, v in kwds.iteritems():
             setattr(self, k, v)
+
+
+def analyse_identifiers(code, known=None):
+    '''
+    Analyses a code string (sequence of statements) to find all identifiers by type.
+    
+    In a given code block, some variable names (identifiers) must be given as inputs to the code
+    block, and some are created by the code block. For example, the line::
+    
+        a = b+c
+        
+    This could mean to create a new variable a from b and c, or it could mean modify the existing
+    value of a from b or c, depending on whether a was previously known.
+    
+    Parameters
+    ----------
+    
+    code : str
+        The code string, a sequence of statements one per line.
+    known : list, set, None
+        A list or set of known (already created) variables.
+    
+    Returns
+    -------
+    
+    newly_defined : set
+        A set of variables that are created by the code block.
+    used_known : set
+        A set of variables that are used and already known, a subset of the ``known`` parameter.
+    dependent : set
+        A set of variables which are used by the code block but not defined by it and not
+        previously known. If this set is nonempty it may indicate an error, for example.
+    '''
+    if known is None:
+        known = set()
+    specifiers = dict((k, Value(k, 1, float64)) for k in known)
+    stmts = make_statements(code, specifiers, float64)
+    defined = set(stmt.var for stmt in stmts if stmt.op==':=')
+    allids = set(get_identifiers(code))
+    dependent = allids.difference(defined, known)
+    used_known = allids.intersection(known) 
+    return defined, used_known, dependent
+
 
 def make_statements(code, specifiers, dtype):
     '''
@@ -55,16 +99,7 @@ def make_statements(code, specifiers, dtype):
                   if hasattr(spec, 'get_value'))
     for line in lines:
         # parse statement into "var op expr"
-        m = re.search(r'(\+|\-|\*|/|//|%|\*\*|>>|<<|&|\^|\|)?=', line.code)
-        if not m:
-            raise ValueError("Could not extract statement from: "+line.code)
-        start, end = m.start(), m.end()
-        op = line.code[start:end].strip()
-        var = line.code[:start].strip()
-        expr = line.code[end:].strip()
-        # var should be a single word
-        if len(re.findall(r'^[A-Za-z_][A-Za-z0-9_]*$', var))!=1:
-            raise ValueError("LHS in statement must be single variable name, line: "+line.code)
+        var, op, expr = parse_statement(line.code)
         if op=='=' and var not in defined:
             op = ':='
             defined.add(var)

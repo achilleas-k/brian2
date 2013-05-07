@@ -3,7 +3,9 @@ source /home/jenkins/.jenkins/virtual_envs/$PythonVersion/$packages/bin/activate
 pip install --upgrade -I nose coverage || :
 
 # Make sure pyparsing and ipython (used for pretty printing) are installed
-if [ ${PythonVersion:0:1} == '2' ]; then
+# If the 6th letter of $PythonVersion is a 2 (i.e. we are using a 2.x version)
+# use the last pyparsing version that is compatible to python 2
+if [ ${PythonVersion:6:1} == '2' ]; then
 	pip install pyparsing==1.5.7
 	else
 	pip install pyparsing --upgrade
@@ -15,13 +17,7 @@ pip install sphinx
 
 echo "Using newest available package versions"
 
-# Use numpy 1.6.2 for Python 2 for now
-if [ ${PythonVersion:0:1} == '2' ]; then
-	pip install numpy==1.6.2
-	else
-	pip install numpy --upgrade
-fi
- 
+pip install --upgrade numpy 
 pip install --upgrade scipy
 pip install --upgrade sympy
 pip install --upgrade matplotlib
