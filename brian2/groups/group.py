@@ -41,7 +41,7 @@ class Group(object):
         try:
             spec = self.specifiers[name]
             # TODO: More efficitent to use Quantity.with_dimensions ?
-            return spec.get_value() * spec.unit
+            return self.state_(name) * spec.unit
         except KeyError:
             raise KeyError("Array named "+name+" not found.")
         
@@ -58,7 +58,7 @@ class Group(object):
         spec = self.specifiers[name]
         fail_for_dimension_mismatch(val, spec.unit,
                                     'Incorrect units for setting %s' % name)
-        spec.set_value(val)
+        self.set_state_(name, val)
 
     def __getattr__(self, name):
         # We do this because __setattr__ and __getattr__ are not active until
