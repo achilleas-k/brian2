@@ -1,6 +1,8 @@
 from brian2 import *
 from brian2.devices.cpp import *
 import os
+from numpy import loadtxt
+from pylab import plot, show
 
 eqs = '''
 dV/dt = (2-V)/(10*ms) : 1
@@ -21,3 +23,7 @@ insert_code('''
 ''')
 
 build(run=True)
+
+i, t = loadtxt('output/neurongroup_0.spikes.txt').T
+plot(t, i, '.k')
+show()

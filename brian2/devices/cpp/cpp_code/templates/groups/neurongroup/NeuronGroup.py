@@ -33,9 +33,9 @@ class NeuronGroupHandler(CPPMethodHandler):
     
     def set_state_(self, proc):
         var, val = proc.args
-        if isinstance(val, (str, numpy.ndarray)):
-            raise ValueError("Can only handle scalar values for now.")
-        return '{{objname}}.set_state("{{args[0]}}", {{args[1]}});'
+        if (isinstance(val, numpy.ndarray) and val.shape!=()):
+            raise ValueError("Can only handle scalar values for now. "+str(proc))
+        return '{{objname}}.set_state("{{args[0]}}", {{args[1]|float}});'
 
     def init(self, proc):
         # Create thresholder C++ code

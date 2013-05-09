@@ -7,6 +7,8 @@ CLASSNAME::CLASSNAME(string When, scalar Order, Clock &c, int N) :
 		NeuronGroup(When, Order, c, N)
 {
 	allocate_memory();
+	// open spike file
+	spikefile.open("{{objname}}.spikes.txt");
 }
 
 CLASSNAME::~CLASSNAME()
@@ -43,6 +45,7 @@ void CLASSNAME::state_update()
 void CLASSNAME::thresholder()
 {
 	spikes.clear();
+	spikes.reserve(_num_neurons);
 	{{thresholder_code.hashdefines}}
 	{{thresholder_code.pointers}}
     for(int _neuron_idx=0; _neuron_idx<_num_neurons; _neuron_idx++)
@@ -50,6 +53,7 @@ void CLASSNAME::thresholder()
     	{{thresholder_code.code}}
     	if(_cond) {
     		spikes.push_back(_neuron_idx);
+    		spikefile << _neuron_idx << " " << clock.t() << endl;
     	}
     }
 }

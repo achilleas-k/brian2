@@ -3,6 +3,8 @@
 
 #include<list>
 #include<string>
+#include<iostream>
+#include<fstream>
 
 using namespace std;
 
@@ -13,6 +15,7 @@ using namespace std;
 class NeuronGroup : public BrianObject, public SpikeSource
 {
 public:
+	ofstream spikefile;
 	int _num_neurons;
 	unordered_map<string, scalar*> arrays;
 	// Constructors

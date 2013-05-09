@@ -271,8 +271,12 @@ class CPPFunctionHandler(Handler):
         call = self.call
         if not isinstance(call, str):
             call = call(proc)
+        # Get the namespace
+        ns = proc.__dict__.copy()
+        if hasattr(self, '_namespace'):
+            ns.update(self._namespace(proc))
         # Apply the template
-        tmp = Template(tmpstr)
+        tmp = Template(call)
         outstr = tmp.render(**ns)
         self.implementation.procedure_lines.append(outstr)
 

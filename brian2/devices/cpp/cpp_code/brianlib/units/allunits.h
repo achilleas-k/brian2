@@ -5,5 +5,7 @@
 
 extern const scalar second;
 extern const scalar msecond;
+extern const scalar volt;
+extern const scalar mvolt;
 
 #endif

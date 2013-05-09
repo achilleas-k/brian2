@@ -4,5 +4,6 @@
 #include "brianlib/briantypes.h"
 
 extern const scalar ms;
+extern const scalar mV;
 
 #endif
