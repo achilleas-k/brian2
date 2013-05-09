@@ -288,7 +288,7 @@ class CPPImplementation(Implementation):
         self.copy_directory(brianlibdir,
                             os.path.join(self.path, 'brianlib'))
                                 
-    def build(self):
+    def build(self, run=False):
         self.ensure_output_directory()
         self.copy_brianlib_files()
         
@@ -332,6 +332,25 @@ class CPPImplementation(Implementation):
 all:
 \tg++ -I. -std=c++0x {names} -o runsim
         '''.format(names=' '.join(cpp_files)))
+        
+        if run:
+            # Try to make and run the project
+            cwd = os.getcwd()
+            os.chdir(self.path)
+            print '********** BUILDING PROJECT ************'
+            print
+            rv = os.system('make')
+            if rv:
+                os.chdir(cwd)
+                raise RuntimeError("Error building project.")
+            print
+            print '********** RUNNING PROJECT *************'
+            print
+            rv = os.system('runsim')
+            os.chdir(cwd)
+            if rv:
+                raise RuntimeError("Error running project.")
+            
         
     def insert_code(self, code):
         '''

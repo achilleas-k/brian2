@@ -1,5 +1,6 @@
 from brian2 import *
 from brian2.devices.cpp import *
+import os
 
 eqs = '''
 dV/dt = -V/(10*ms) : 1
@@ -19,4 +20,4 @@ insert_code('''
     cout << neurongroup_0.arrays["V"][0] << endl;
 ''')
 
-build()
+build(run=True)
