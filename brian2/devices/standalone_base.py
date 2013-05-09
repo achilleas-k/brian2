@@ -15,6 +15,7 @@ Ideas and questions
 import brian2
 import os
 import fnmatch
+import inspect
 from brian2.devices.methodlogger import method_logger, MethodCall
 from brian2.devices.functionlogger import function_logger, FunctionCall
 
@@ -45,6 +46,25 @@ class Implementation(object):
         self.procedural_order = []
         self.handlers = {}
         self.set_output_directory()
+
+    def find_handlers(self, templatedir, handler_list, handler_base, pattern='*.py'):
+        '''
+        Searches templatedir recursively for Python files matching pattern,
+        imports them, and searches for classes derived from handler_base,
+        then adds them to handler_list. This can be used for automatically
+        filling the class_handlers and function_handlers lists.
+        '''
+        for root, dirnames, filenames in os.walk(templatedir):
+            for filename in filenames:
+                if not fnmatch.fnmatch(filename, pattern):
+                    continue
+                fullname = os.path.normpath(os.path.join(root, filename))
+                ns = {}
+                # TODO: improve this by importing using imp.load_source?
+                execfile(fullname, ns)
+                for k, v in ns.items():
+                    if inspect.isclass(v) and issubclass(v, handler_base) and v is not handler_base:
+                        handler_list.append(v)
 
     def registration(self, all, ns):
         '''

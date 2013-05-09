@@ -91,7 +91,7 @@ from brian2.devices.functionlogger import function_logger, FunctionCall
 
 __all__ = [# Package classes and functions
            'CPPImplementation',
-           'CPPMethodHandler',
+           'CPPMethodHandler', 'CPPFunctionHandler',
            # Device specific objects and functions
            'build', 'insert_code',
            ]
@@ -249,41 +249,46 @@ class CPPMethodHandler(MethodHandler):
                                                         self.basename))
 
 
-# TODO: make RunHandler work like CPPMethodHandler
-class RunHandler(Handler):
-    handle_function = brian2.run
-    runit = False
+class CPPFunctionHandler(Handler):
+    '''
+    Handles translation of function calls into C++ standalone code.
+    
+    Classes should be derived from this and define the following attributes:
+    
+    ``handle_function``
+        The Brian function being handled.
+    ``runit``
+        True or False, determines whether the original function will be called
+        or not.
+    ``call``
+        A string (Jinja template) or method returning a string (Jinja template)
+        with code to be inserted into ``main.cpp``. If a method, should take
+        one argument ``proc``.
+        
+    See `CPPmethodHandler` for more details.
+    '''
     def __call__(self, proc):
-        self.implementation.procedure_lines.append(proc.call_representation)
+        call = self.call
+        if not isinstance(call, str):
+            call = call(proc)
+        # Apply the template
+        tmp = Template(tmpstr)
+        outstr = tmp.render(**ns)
+        self.implementation.procedure_lines.append(outstr)
 
         
 # TODO: add methods to add code to main.cpp and to add templates to render,
 # this will make it all much clearer than directly adding to .procedure_lines,
 # and so forth.
 class CPPImplementation(Implementation):
-    function_handlers = [RunHandler]
-    
     def __init__(self):
         Implementation.__init__(self)
-        self.find_class_handlers()
-        self.registration(__all__, globals())
-        
-    def find_class_handlers(self):
         self.class_handlers = []
-        for root, dirnames, filenames in os.walk(templatedir):
-            for filename in filenames:
-                if not filename.endswith('.py'):
-                    continue
-                fullname = os.path.normpath(os.path.join(root, filename))
-                ns = {}
-                # TODO: improve this by importing using imp.load_source?
-                execfile(fullname, ns)
-                for k, v in ns.items():
-                    if k.startswith('_'):
-                        continue
-                    if inspect.isclass(v) and issubclass(v, CPPMethodHandler) and v is not CPPMethodHandler:
-                        self.class_handlers.append(v)
-                        
+        self.function_handlers = []
+        self.find_handlers(templatedir, self.class_handlers, CPPMethodHandler)
+        self.find_handlers(templatedir, self.function_handlers, CPPFunctionHandler)
+        self.registration(__all__, globals())
+                                
     def copy_brianlib_files(self):
         self.copy_directory(brianlibdir,
                             os.path.join(self.path, 'brianlib'))
