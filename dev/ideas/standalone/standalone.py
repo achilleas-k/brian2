@@ -12,8 +12,10 @@ net = Network(G)
 
 net.run(100*ms)
 
+#print '%g'%G.V[0]
+
 insert_code('''
-    cout << "Next two lines should be the same:\\n4.31712e-005\\n";
+    cout << "Next two lines should be the same:\\n4.53999e-005\\n";
     cout << neurongroup_0.arrays["V"][0] << endl;
 ''')
 

@@ -1,3 +1,4 @@
+#include<math.h>
 #include "{{objname}}.h"
 
 #define dt ({{obj.clock.dt|float}})

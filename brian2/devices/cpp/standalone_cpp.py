@@ -91,6 +91,7 @@ from brian2.devices.functionlogger import function_logger, FunctionCall
 
 __all__ = [# Package classes and functions
            'CPPImplementation',
+           'CPPMethodHandler',
            # Device specific objects and functions
            'build', 'insert_code',
            ]
@@ -110,10 +111,11 @@ class CPPMethodHandlerMethod(object):
     and handles inserting lines into the main.cpp file and creating templated
     files corresponding to each object. See `CPPMethodHandler` for more details.
     
-    When called with ``proc`` it tries to find a matching template file::
-    
-        templatedir/basename.methodname.cpp
-        
+    When called with ``proc`` it finds a template file by checking
+    the original `CPPMethodHandler` class attribute with the same name. If it
+    is a string, it uses it directly. If it is a method, it uses the string
+    returned by the method.
+
     This template will be rendered with the namespace defined by
     ``proc.__dict__`` and (optionally, if one exists) the namespace returned by
     ``handler._namespace(proc)``. The rendered template will be inserted
@@ -131,9 +133,10 @@ class CPPMethodHandlerMethod(object):
         The main handler class which this method will be attached to.
     name : str
         The name of the method.
-    orig : method
+    orig : method or str
         The original method (if there was one), which can be used to do extra
-        work beyond what the automatic handling does.
+        work beyond what the automatic handling does. Or a string in Jinja
+        format with text to be inserted into ``main.cpp``.
     basename : str
         The base filename of template definitions for this class/method.
     '''
@@ -146,8 +149,10 @@ class CPPMethodHandlerMethod(object):
     def __call__(self, proc):
         # Call the original Handler's method first if it has one, it may
         # raise errors or modify proc.
-        if self.orig is not None:
-            self.orig(proc)
+        if isinstance(self.orig, str):
+            tmpstr = self.orig
+        else:
+            tmpstr = self.orig(proc)
         ns = proc.__dict__.copy()
         if hasattr(self.handler, '_namespace'):
             ns.update(self.handler._namespace(proc))
@@ -156,13 +161,10 @@ class CPPMethodHandlerMethod(object):
             dotname = '__init__'
         else:
             dotname = self.name
-        tmpfn = os.path.join(templatedir,
-                             self.basename+'.'+dotname+'.cpp')
-        if os.path.exists(tmpfn):
-            tmpstr = open(tmpfn, 'r').read()
-            tmp = Template(tmpstr)
-            outstr = tmp.render(**ns)
-            self.implementation.procedure_lines.append(outstr)
+        # Apply the template
+        tmp = Template(tmpstr)
+        outstr = tmp.render(**ns)
+        self.implementation.procedure_lines.append(outstr)
         # If this is the init method, try to load the class template
         if dotname=='__init__':
             for ext in ['cpp', 'h']:
@@ -198,9 +200,9 @@ class CPPMethodHandler(MethodHandler):
     Brian package directory, e.g. for `NeuronGroup` it would be
     ``groups/neurongroup``. The full base name is then::
     
-        basefilename.classname
+        basefilename/classname
         
-    So for `NeuronGroup` it would be ``groups/neurongroup.NeuronGroup``.
+    So for `NeuronGroup` it would be ``groups/neurongroup/NeuronGroup``.
     Now all the template files will be stored in the template directory,
     followed by this name, followed by various values. If you want to provide
     a full template for the whole class (with various methods, etc.) then
@@ -210,9 +212,9 @@ class CPPMethodHandler(MethodHandler):
         templates/basename.h
         
     If you want to provide code that will be inserted into the ``main.cpp``
-    at the place corresponding to the method call, then create a template file::
-    
-        templates/basename.methodname.cpp
+    at the place corresponding to the method call, then create a class
+    attribute with the string (in Jinja format) or a method taking an argument
+    ``proc`` that returns a string (in Jinja format).
         
     See `CPPMethodHandlerMethod` for more details.
     
@@ -221,13 +223,6 @@ class CPPMethodHandler(MethodHandler):
     addition the `CPPMethodHandler` class defines a ``_namespace(proc)`` method
     then the namespace returned by this will be added to the namespace used by
     Jinja to render it. The ``proc`` argument is the `MethodCall` object.
-    
-    If in addition to the default templating behaviour you want to add some
-    additional code, you can create a method with the same name as the method
-    you are tracking (e.g. ``set_state`` for `NeuronGroup`) taking one argument,
-    the ``proc`` object. This method can do things like adding to the ``proc``
-    object to provide additional namespace data, or raising an error if the
-    arguments are not supported, etc.
     
     Parameters
     ----------
@@ -241,7 +236,7 @@ class CPPMethodHandler(MethodHandler):
         classfilename = inspect.getsourcefile(self.handle_class)
         brian2filename = inspect.getsourcefile(brian2).replace('__init__.py', '')
         # remove the brian2 common part and the .py at the end
-        self.basename = classfilename.replace(brian2filename, '')[:-3]+'.'+self.handle_class.__name__
+        self.basename = classfilename.replace(brian2filename, '')[:-3]+'/'+self.handle_class.__name__
         # Set up methods
         for name in self.method_names.keys():
             if name=='__init__':
@@ -252,26 +247,6 @@ class CPPMethodHandler(MethodHandler):
             orig = getattr(self, name, None)
             setattr(self, name, CPPMethodHandlerMethod(self, name, orig,
                                                         self.basename))
-
-
-class NeuronGroupHandler(CPPMethodHandler):
-    handle_class = brian2.NeuronGroup
-    method_names = {'__init__':True,
-                    'set_state_':True, 'set_state':True,
-                    }
-    def set_state(self, proc):
-        var, val = proc.args
-        if isinstance(val, (str, numpy.ndarray)):
-            raise ValueError("Can only handle scalar values for now.")
-    def set_state_(self, proc):
-        return self.set_state(proc)
-
-        
-class NetworkHandler(CPPMethodHandler):
-    handle_class = brian2.Network
-    method_names = {'__init__': True,
-                    'run': False,
-                    }
 
 
 # TODO: make RunHandler work like CPPMethodHandler
@@ -286,12 +261,28 @@ class RunHandler(Handler):
 # this will make it all much clearer than directly adding to .procedure_lines,
 # and so forth.
 class CPPImplementation(Implementation):
-    class_handlers = [NeuronGroupHandler, NetworkHandler]
     function_handlers = [RunHandler]
     
     def __init__(self):
         Implementation.__init__(self)
+        self.find_class_handlers()
         self.registration(__all__, globals())
+        
+    def find_class_handlers(self):
+        self.class_handlers = []
+        for root, dirnames, filenames in os.walk(templatedir):
+            for filename in filenames:
+                if not filename.endswith('.py'):
+                    continue
+                fullname = os.path.normpath(os.path.join(root, filename))
+                ns = {}
+                # TODO: improve this by importing using imp.load_source?
+                execfile(fullname, ns)
+                for k, v in ns.items():
+                    if k.startswith('_'):
+                        continue
+                    if inspect.isclass(v) and issubclass(v, CPPMethodHandler) and v is not CPPMethodHandler:
+                        self.class_handlers.append(v)
                         
     def copy_brianlib_files(self):
         self.copy_directory(brianlibdir,
