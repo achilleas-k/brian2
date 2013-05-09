@@ -10,6 +10,8 @@ NeuronGroup::NeuronGroup(string When, scalar Order, Clock &c, int N) :
 void NeuronGroup::update()
 {
 	state_update();
+	thresholder();
+	resetter();
 }
 
 void NeuronGroup::set_state(string name, scalar value)

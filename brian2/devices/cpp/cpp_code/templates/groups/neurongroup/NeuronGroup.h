@@ -24,6 +24,8 @@ public:
 	void allocate_memory();
 	void deallocate_memory();
 	virtual void state_update();
+	virtual void thresholder();
+	virtual void resetter();
 };
 
 #endif

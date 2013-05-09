@@ -7,9 +7,10 @@
 using namespace std;
 
 #include "brianlib/core/base.h"
+#include "brianlib/core/spikesource.h"
 #include "brianlib/briancpputil.h"
 
-class NeuronGroup : public BrianObject
+class NeuronGroup : public BrianObject, public SpikeSource
 {
 public:
 	int _num_neurons;
@@ -20,6 +21,8 @@ public:
 	virtual void state_update() = 0;
 	virtual void update();
 	void set_state(string name, scalar value);
+	virtual void thresholder() = 0;
+	virtual void resetter() = 0;
 };
 
 #endif
