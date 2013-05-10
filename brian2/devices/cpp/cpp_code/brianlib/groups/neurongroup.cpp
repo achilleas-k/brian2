@@ -5,6 +5,7 @@ NeuronGroup::NeuronGroup(string When, scalar Order, Clock &c, int N) :
 	BrianObject(When, Order, c)
 {
 	_num_neurons = N;
+	recordspikes = false;
 }
 
 void NeuronGroup::update()

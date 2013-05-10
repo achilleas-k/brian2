@@ -53,7 +53,8 @@ void CLASSNAME::thresholder()
     	{{thresholder_code.code}}
     	if(_cond) {
     		spikes.push_back(_neuron_idx);
-    		spikefile << _neuron_idx << " " << clock.t() << endl;
+    		if(recordspikes)
+    			spikefile << _neuron_idx << " " << clock.t() << endl;
     	}
     }
 }

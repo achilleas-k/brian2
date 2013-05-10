@@ -1,6 +1,10 @@
 from brian2 import *
 
+N = 1000
 ondevice = True
+recordspikes = False
+set_default_language(PythonLanguage())
+#set_default_language(CPPLanguage(extra_compile_args=['-O3', '-ffast-math', '-march=native']))
 
 if ondevice:
     from brian2.devices.cpp import *
@@ -16,7 +20,6 @@ if ondevice:
     clock_t start = clock();
     ''')
 
-N = 1000
 eqs = '''
 dv/dt=(v0-v)/(10*ms) : volt
 v0 : volt
@@ -35,12 +38,13 @@ else:
     {
       v0[i] = 20*mV*(scalar)i/(neurongroup_0._num_neurons-1);
     }
-    ''')
+    neurongroup_0.recordspikes = %s;
+    '''%repr(recordspikes).lower())
 
 duration = 5 * second
 net = Network(group)
 
-if not ondevice:
+if not ondevice and recordspikes:
     monitor = SpikeMonitor(group)
     net.add(monitor)
 
@@ -60,25 +64,36 @@ if ondevice:
 
 if ondevice:
     insert_code('''
+    cout << "Running standalone C++" << endl << endl;
     cout << "Preparation time: " << double( start_sim-start ) / (double)CLOCKS_PER_SEC << endl;
     cout << "Run time: " << double( end_sim-start_sim ) / (double)CLOCKS_PER_SEC << endl;
     ''')
 else:
+    print "Running Python codegen language =", get_default_language().__class__.__name__
+    print
     print 'Preparation time:', start_sim-start
     print 'Run time:', end_sim-start_sim
+
+if ondevice:
+    insert_code('''
+    cout << endl << "Final V[N-1] = " << neurongroup_0.arrays["v"][neurongroup_0._num_neurons-1] << endl;
+    ''')
+else:
+    print
+    print "Final V[N-1] =", group.v[-1]
 
 if ondevice:
     # We have to hack this for the moment
     net.pre_run(('implicit-run-namespace', globals()))
     build(run=True)
 
-if ondevice:
-    i, t = loadtxt('output/neurongroup_0.spikes.txt').T
-    i = array(i, dtype=int)
-else:
-    i, t = monitor.it
-
-count = bincount(i, minlength=N)
-
-plot(v0, count/duration)
-show()
+if recordspikes:
+    if ondevice:
+        i, t = loadtxt('output/neurongroup_0.spikes.txt').T
+        i = array(i, dtype=int)
+    else:
+        i, t = monitor.it
+    count = bincount(i, minlength=N)
+    
+    plot(v0, count/duration)
+    show()

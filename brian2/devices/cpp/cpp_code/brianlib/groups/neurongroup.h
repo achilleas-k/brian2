@@ -17,6 +17,7 @@ class NeuronGroup : public BrianObject, public SpikeSource
 public:
 	ofstream spikefile;
 	int _num_neurons;
+	bool recordspikes;
 	unordered_map<string, scalar*> arrays;
 	// Constructors
 	NeuronGroup(string When, scalar Order, Clock &c, int N);
