@@ -339,7 +339,7 @@ class CPPImplementation(Implementation):
         cpp_files = [f.replace('\\', '/') for f in cpp_files]
         open(os.path.join(self.path, 'makefile'), 'w').write('''
 all:
-\tg++ -I. -std=c++0x -O3 -march=native -ffast-math {names} -o runsim
+\tg++ -I. -std=c++0x -O3 -ffast-math {names} -o runsim
         '''.format(names=' '.join(cpp_files)))
         
         if run:
@@ -355,7 +355,7 @@ all:
             print
             print '********** RUNNING PROJECT *************'
             print
-            rv = os.system('runsim')
+            rv = os.system('./runsim')
             os.chdir(cwd)
             if rv:
                 raise RuntimeError("Error running project.")
