@@ -355,7 +355,10 @@ all:
             print
             print '********** RUNNING PROJECT *************'
             print
-            rv = os.system('./runsim')
+            if os.name=='nt':
+                rv = os.system('runsim')
+            else:
+                rv = os.system('./runsim')
             os.chdir(cwd)
             if rv:
                 raise RuntimeError("Error running project.")
