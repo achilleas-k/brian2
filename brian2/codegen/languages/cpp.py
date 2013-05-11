@@ -264,7 +264,10 @@ class CPPLanguage(Language):
             %POINTERS%
             int _cpp_numspikes = 0;
             
-            npy_int *_spikes_space = (npy_int *)malloc(sizeof(npy_int) * _num_neurons);             
+            /* Space big enough to contain all neuron indices */
+            npy_int *_spikes_space = (npy_int *)malloc(sizeof(npy_int) * _num_neurons);
+            
+            /* Evaluate all the threshold conditions */             
             for(int _neuron_idx=0; _neuron_idx<_num_neurons; _neuron_idx++)
             {
                 %CODE%
@@ -272,8 +275,26 @@ class CPPLanguage(Language):
                     _spikes_space[_cpp_numspikes++] = _neuron_idx;
                 }
             }
+            /* Create a numpy array of just the correct size */
             npy_intp _dims[] = {_cpp_numspikes};
-            PyObject *_numpy_spikes_array = PyArray_SimpleNewFromData(1, _dims, NPY_INT, _spikes_space);
+            PyObject *_numpy_spikes_array = PyArray_New(&PyArray_Type,
+                                                        1,
+                                                        _dims,
+                                                        NPY_INT,
+                                                        NULL,
+                                                        NULL,
+                                                        0,
+                                                        NPY_ARRAY_OWNDATA,
+                                                        NULL);
+            size_t _bytes = sizeof(npy_int) * _cpp_numspikes;
+            /* Copy the data into the numpy array */
+            memcpy(PyArray_GETPTR1(_numpy_spikes_array, 0),
+                                   _spikes_space,
+                                   _bytes);             
+            
+            /* Free the memory for the previously allocated array */
+            free(_spikes_space);
+
             return_val = _numpy_spikes_array; 
             ''',
             '%SUPPORT_CODE%':'%SUPPORT_CODE%',
