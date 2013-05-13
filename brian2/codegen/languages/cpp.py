@@ -284,7 +284,7 @@ class CPPLanguage(Language):
                                                         NULL,
                                                         NULL,
                                                         0,
-                                                        NPY_ARRAY_OWNDATA,
+                                                        0,
                                                         NULL);
             size_t _bytes = sizeof(npy_int) * _cpp_numspikes;
             /* Copy the data into the numpy array */
