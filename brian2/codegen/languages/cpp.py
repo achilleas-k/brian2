@@ -295,7 +295,10 @@ class CPPLanguage(Language):
             /* Free the memory for the previously allocated array */
             free(_spikes_space);
 
-            return_val = _numpy_spikes_array; 
+            return_val = _numpy_spikes_array;
+            
+            /* Decrease the refcount to avoid a memory leak */
+            Py_XDECREF(_numpy_spikes_array);
             ''',
             '%SUPPORT_CODE%':'%SUPPORT_CODE%',
             }
