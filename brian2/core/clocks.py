@@ -81,9 +81,9 @@ class Clock(Nameable):
         self.i_end = int(float(end) / self.dt_)
         
     def _get_dt_(self):
-        if hasattr(self, '_dt'):
+        try:
             return self._dt
-        else:
+        except AttributeError:
             dtspec = self._dt_spec
             if dtspec is None:
                 dtspec = 0.1*msecond
