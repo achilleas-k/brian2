@@ -15,4 +15,5 @@ substantial changes.
    refractoriness_and_linearity
    device
    meeting-02-10-2012
- 
+   standalone
+   
