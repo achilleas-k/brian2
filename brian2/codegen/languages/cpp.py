@@ -273,6 +273,7 @@ class CPPLanguage(Language):
                 %CODE%
                 if(_cond) {
                     _spikes_space[_cpp_numspikes++] = _neuron_idx;
+                    _array_refractory_until[_neuron_idx] = t + _array_refractory[_neuron_idx];
                 }
             }
             /* Create a numpy array of just the correct size */
