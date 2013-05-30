@@ -321,3 +321,17 @@ imposes a standard way of doing things for future code, namely everyone
 writing core Brian code has to make sure to keep the parts that do computational
 work separate and put them into separate objects and classes. I think that's
 OK though, good in fact.
+
+Some details on the implementation of this approach:
+The delegation to objects for code execution is already handled by the
+`Language` objects used in code generation. What remains is to delegate the
+memory creation. This could be done in a `Device` object. The normal use case
+would be to use a `RuntimeDevice` with either a `PythonLanguage` or a
+`CPPLanguage` object. For standalone code, on the other hand, the devices would
+have a fixed connection to a specific language object. Possibly, a parent
+class `StandaloneDevice` could already provide the general structure that is
+then filled with actual code by `StandaloneCPPDevice`, `StandaloneJavaDevice`, 
+etc. The device would be set with a global function (e.g.
+``set_device(RuntimeDevice(CPPLanguage()))``, possibly with a convenience
+syntax for standard devices, e.g. ``set_device('runtime_cpp')``), or with
+a preference.  
