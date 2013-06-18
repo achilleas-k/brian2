@@ -29,8 +29,7 @@ class BrianObject(Nameable):
         loop.
     name : str, optional
         A unique name for the object - one will be assigned automatically if
-        not provided (of the form ``brianobject_1``, etc.) based on the
-        stem `basename`.
+        not provided (of the form ``brianobject_1``, etc.).
 
     Notes
     -----
@@ -40,7 +39,7 @@ class BrianObject(Nameable):
     Brian objects deriving from this class should always define an
     ``update()`` method, that gets called by `Network.run`.    
     '''
-    def __init__(self, when=None, name=None):
+    def __init__(self, when=None, name='brianobject*'):
         scheduler = Scheduler(when)
         when = scheduler.when
         order = scheduler.order
@@ -65,9 +64,6 @@ class BrianObject(Nameable):
         logger.debug("Created BrianObject with name {self.name}, "
                      "clock name {self.clock.name}, "
                      "when={self.when}, order={self.order}".format(self=self))
-
-    #: The stem for the automatically generated `name` attribute
-    basename = 'brianobject'
 
     #: Whether or not `MagicNetwork` is invalidated when a new `BrianObject` of this type is created or removed
     invalidates_magic_network = True
@@ -149,6 +145,14 @@ class BrianObject(Nameable):
                         unsetting the `active` attribute will set or unset
                         it for all `contained_objects`. 
                         ''')
+
+    def __repr__(self):
+        description = ('{classname}(when={scheduler}, name={name})')
+        return description.format(classname=self.__class__.__name__,
+                                  scheduler=repr(Scheduler(when=self.when,
+                                                           clock=self.clock,
+                                                           order=self.order)),
+                                  name=repr(self.name))
 
     # This is a repeat from Nameable.name, but we want to get the documentation
     # here again

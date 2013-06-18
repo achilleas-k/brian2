@@ -34,7 +34,6 @@ class Subgroup(BrianObject, SpikeSource):
     
     TODO: Group state variable access
     '''
-    basename = 'subgroup'
     def __init__(self, source, start, end, name=None):
         self.source = weakref.proxy(source)
         # We want to update the spikes attribute after it has been updated
@@ -57,6 +56,14 @@ class Subgroup(BrianObject, SpikeSource):
         # TODO: improve efficiency with bisect?
         spikes = spikes[logical_and(spikes>=self.start, spikes<self.end)]
         self.spikes = spikes-self.start
+        
+    def __repr__(self):
+        description = '<{classname} {name} of {source} from {start} to {end}>'
+        return description.format(classname=self.__class__.__name__,
+                                  name=repr(self.name),
+                                  source=repr(self.source.name),
+                                  start=self.start,
+                                  end=self.end)
 
 
 if __name__=='__main__':

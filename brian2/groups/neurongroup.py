@@ -3,6 +3,7 @@ This model defines the `NeuronGroup`, the core of most simulations.
 '''
 import numpy as np
 from numpy import array
+import sympy
 
 from brian2.equations.equations import (Equations, DIFFERENTIAL_EQUATION,
                                         STATIC_EQUATION, PARAMETER)
@@ -39,7 +40,7 @@ class StateUpdater(GroupCodeRunner):
         GroupCodeRunner.__init__(self, group,
                                        group.language.template_state_update,
                                        when=(group.clock, 'groups'),
-                                       name=group.name + '_stateupdater',
+                                       name=group.name+'_stateupdater*',
                                        check_units=False)        
 
         self.method = StateUpdateMethod.determine_stateupdater(self.group.equations,
@@ -55,7 +56,7 @@ class StateUpdater(GroupCodeRunner):
                                                                self.method_choice)
 
         # Update the is_active variable for the refractory period mechanism
-        self.abstract_code = 'is_active = t >= refractory_until\n'
+        self.abstract_code = 'is_active = 1* (t >= refractory_until)\n'
         
         self.abstract_code += self.method(self.group.equations,
                                           self.group.namespace,
@@ -72,7 +73,7 @@ class Thresholder(GroupCodeRunner):
         GroupCodeRunner.__init__(self, group,
                                  group.language.template_threshold,
                                  when=(group.clock, 'thresholds'),
-                                 name=group.name + '_thresholder',
+                                 name=group.name+'_thresholder*',
                                  # TODO: This information should be included in
                                  # the template instead
                                  additional_specifiers=['t',
@@ -96,7 +97,7 @@ class Resetter(GroupCodeRunner):
         GroupCodeRunner.__init__(self, group,
                                  group.language.template_reset,
                                  when=(group.clock, 'resets'),
-                                 name=group.name + '_resetter',
+                                 name=group.name+'_resetter*',
                                  iterate_all=False,
                                  additional_specifiers=['_spikes'])
     
@@ -151,13 +152,12 @@ class NeuronGroup(BrianObject, Group, SpikeSource):
     attribute is set to 0 initially, but this can be modified using the
     attributes `state_updater`, `thresholder` and `resetter`.    
     '''
-    basename = 'neurongroup'
     def __init__(self, N, equations, method=None,
                  threshold=None,
                  reset=None,
                  namespace=None,
                  dtype=None, language=None,
-                 clock=None, name=None):
+                 clock=None, name='neurongroup*'):
         BrianObject.__init__(self, when=clock, name=name)
 
         try:
@@ -220,6 +220,7 @@ class NeuronGroup(BrianObject, Group, SpikeSource):
         if self.threshold is not None:
             self.thresholder = Thresholder(self)
             
+
         #: Resets neurons which have spiked (`spikes`)
         self.resetter = None
         if self.reset is not None:
@@ -256,7 +257,7 @@ class NeuronGroup(BrianObject, Group, SpikeSource):
     def _allocate_memory(self, dtype=None):
         # Allocate memory (TODO: this should be refactored somewhere at some point)
         arrayvarnames = set(eq.varname for eq in self.equations.itervalues() if
-                            eq.eq_type in (DIFFERENTIAL_EQUATION,
+                            eq.type in (DIFFERENTIAL_EQUATION,
                                            PARAMETER))
         arrays = {}
         for name in arrayvarnames:
@@ -283,18 +284,18 @@ class NeuronGroup(BrianObject, Group, SpikeSource):
             When to run, by default in the 'start' slot with the same clock as
             the group.
         name : str, optional
-            A unique name, by default the name of the group appended with
-            'runner_0', 'runner_1', etc.
+            A unique name, if non is given the name of the group appended with
+            'runner', 'runner_1', etc. will be used. If a name is given
+            explicitly, it will be used as given (i.e. the group name will not
+            be prepended automatically).
         '''
         if when is None:  # TODO: make this better with default values
             when = Scheduler(clock=self.clock)
         else:
             raise NotImplementedError
+
         if name is None:
-            if not hasattr(self, 'num_runners'):
-                self.num_runners = 0
-            name = self.name + '_runner_' + str(self.num_runners)
-            self.num_runners += 1
+            name = self.name + '_runner*'
 
         runner = GroupCodeRunner(self, self.language.template_state_update,
                                  code=code, name=name, when=when)
@@ -314,7 +315,7 @@ class NeuronGroup(BrianObject, Group, SpikeSource):
         # First add all the differential equations and parameters, because they
         # may be referred to by static equations
         for eq in self.equations.itervalues():
-            if eq.eq_type in (DIFFERENTIAL_EQUATION, PARAMETER):
+            if eq.type in (DIFFERENTIAL_EQUATION, PARAMETER):
                 array = self.arrays[eq.varname]
                 constant = ('constant' in eq.flags)
                 s.update({eq.varname: ArrayVariable(eq.varname,
@@ -322,8 +323,9 @@ class NeuronGroup(BrianObject, Group, SpikeSource):
                                                     array.dtype,
                                                     array,
                                                     '_neuron_idx',
-                                                    constant)})        
-            elif eq.eq_type == STATIC_EQUATION:
+                                                    constant)})
+        
+            elif eq.type == STATIC_EQUATION:
                 s.update({eq.varname: Subexpression(eq.varname, eq.unit,
                                                     brian_prefs['core.default_scalar_dtype'],
                                                     str(eq.expr),
@@ -340,7 +342,7 @@ class NeuronGroup(BrianObject, Group, SpikeSource):
         return s
 
     def pre_run(self, namespace):
-
+    
         # Update the namespace information in the specifiers in case the
         # namespace was not specified explicitly defined at creation time
         # Note that values in the explicit namespace might still change
@@ -354,3 +356,20 @@ class NeuronGroup(BrianObject, Group, SpikeSource):
         # Check units
         self.equations.check_units(self.namespace, self.specifiers,
                                    namespace)
+    
+    def _repr_html_(self):
+        text = [r'NeuronGroup "%s" with %d neurons.<br>' % (self.name, self.N)]
+        text.append(r'<b>Model:</b><nr>')
+        text.append(sympy.latex(self.equations))
+        text.append(r'<b>Integration method:</b><br>')
+        text.append(sympy.latex(self.state_updater.method)+'<br>')
+        if self.threshold is not None:
+            text.append(r'<b>Threshold condition:</b><br>')
+            text.append('<code>%s</code><br>' % str(self.threshold))
+            text.append('')
+        if self.reset is not None:
+            text.append(r'<b>Reset statement:</b><br>')            
+            text.append(r'<code>%s</code><br>' % str(self.reset))
+            text.append('')
+                    
+        return '\n'.join(text)

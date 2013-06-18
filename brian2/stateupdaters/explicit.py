@@ -183,6 +183,15 @@ class ExplicitStateUpdater(StateUpdateMethod):
     ValueError
         If the parsing of the description failed.
     
+    Notes
+    -----
+    Since clocks are updated *after* the state update, the time ``t`` used
+    in the state update step is still at its previous value. Enumerating the
+    states and discrete times, ``return x + dt*f(x, t)`` is therefore
+    understood as :math:`x_{i+1} = x_i + dt f(x_i, t_i)`, yielding the correct
+    forward Euler integration. If the integrator has to refer to the time at
+    the end of the timestep, simply use ``t + dt`` instead of ``t``. 
+    
     See also
     --------
     euler, rk2, rk4, milstein
@@ -254,13 +263,20 @@ class ExplicitStateUpdater(StateUpdateMethod):
             return True
     
     def __repr__(self):
-        representation = '{classname}({description}, stochastic={stochastic})'
-        return representation.format(classname=self.__class__.__name__,
-                                     description=repr(self._description),
-                                     stochastic=repr(self.stochastic))
+        # recreate a description string
+        description = '\n'.join(['%s = %s' % (var, expr)
+                                 for var, expr in self.statements])
+        if len(description):
+            description += '\n'
+        description += 'return ' + str(self.output)
+        r = "{classname}('''{description}''', stochastic={stochastic})"
+        return r.format(classname=self.__class__.__name__,
+                        description=description,
+                        stochastic=repr(self.stochastic))
+
     
     def __str__(self):
-        s = ''
+        s = '%s\n' % self.__class__.__name__
         
         if len(self.statements) > 0:
             s += 'Intermediate statements:\n'
@@ -271,6 +287,20 @@ class ExplicitStateUpdater(StateUpdateMethod):
         s += 'Output:\n'
         s += str(self.output)
         return s
+
+    def _latex(self, *args):
+        from sympy import latex, Symbol
+        s = [r'\begin{equation}']
+        for var, expr in self.statements:      
+            expr = expr.subs(Symbol('x'), Symbol('x_t'))      
+            s.append(latex(Symbol(var)) + ' = ' + latex(expr) + r'\\')
+        expr = self.output.subs(Symbol('x'), 'x_t')
+        s.append(r'x_{t+1} = ' + latex(expr))
+        s.append(r'\end{equation}')
+        return '\n'.join(s)
+
+    def _repr_latex_(self):
+        return self._latex()
 
     def _generate_RHS(self, eqs, var, eq_symbols, temp_vars, expr,
                       non_stochastic_expr, stochastic_expr):
@@ -310,23 +340,23 @@ class ExplicitStateUpdater(StateUpdateMethod):
                 raise ValueError('Error parsing the expression "%s": %s' %
                                  (expr, str(ex)))
             
-            # Generate specific temporary variables for the state variable we
-            # are currently dealing with, e.g. '_k_v' for the state variable 'v'
-            # and the temporary variable 'k'.
-            temp_var_replacements = dict(((self.symbols[temp_var],
-                                           _symbol('_'+temp_var+'_'+var))
-                                          for temp_var in temp_vars))
-            
-            # In the expression given as 'x', replace 'x' by the variable 'var'
-            # and all the temporary variables by their variable-specific
-            # counterparts.
-            x_replacement = x.subs(self.symbols['x'], eq_symbols[var])
-            x_replacement = x_replacement.subs(temp_var_replacements)
-            
-            # Replace the variable `var` in the expression by the new `x`
-            # expression
-            s_expr = s_expr.subs(eq_symbols[var], x_replacement)
-            
+            for var in eq_symbols:
+                # Generate specific temporary variables for the state variable,
+                # e.g. '_k_v' for the state variable 'v' and the temporary
+                # variable 'k'.
+                temp_var_replacements = dict(((self.symbols[temp_var],
+                                               _symbol('_'+temp_var+'_'+var))
+                                              for temp_var in temp_vars))
+                # In the expression given as 'x', replace 'x' by the variable
+                # 'var' and all the temporary variables by their
+                # variable-specific counterparts.
+                x_replacement = x.subs(self.symbols['x'], eq_symbols[var])
+                x_replacement = x_replacement.subs(temp_var_replacements)
+                
+                # Replace the variable `var` in the expression by the new `x`
+                # expression
+                s_expr = s_expr.subs(eq_symbols[var], x_replacement)
+                
             # Directly substitute the 't' expression for the symbol t, there
             # are no temporary variables to consider here.             
             s_expr = s_expr.subs(self.symbols['t'], t)
@@ -434,11 +464,11 @@ class ExplicitStateUpdater(StateUpdateMethod):
         _v = -dt*v/tau + v
         v = _v
         >>> print(rk4(eqs))
-        _k1_v = -dt*v/tau
-        _k2_v = -dt*(_k1_v/2 + v)/tau
-        _k3_v = -dt*(_k2_v/2 + v)/tau
-        _k4_v = -dt*(_k3_v + v)/tau
-        _v = _k1_v/6 + _k2_v/3 + _k3_v/3 + _k4_v/6 + v
+        _k_1_v = -dt*v/tau
+        _k_2_v = -dt*(_k_1_v/2 + v)/tau
+        _k_3_v = -dt*(_k_2_v/2 + v)/tau
+        _k_4_v = -dt*(_k_3_v + v)/tau
+        _v = _k_1_v/6 + _k_2_v/3 + _k_3_v/3 + _k_4_v/6 + v
         v = _v
         '''
         
@@ -451,7 +481,7 @@ class ExplicitStateUpdater(StateUpdateMethod):
         
         # A dictionary mapping all the variables in the equations to their
         # sympy representations 
-        eq_variables = dict(((var, _symbol(var)) for var in eqs.names))
+        eq_variables = dict(((var, _symbol(var)) for var in eqs.eq_names))
         
         # Generate the random numbers for the stochastic variables
         stochastic_variables = eqs.stochastic_variables
@@ -508,11 +538,11 @@ rk2 = ExplicitStateUpdater('''
 
 #: Classical Runge-Kutta method (RK4)
 rk4 = ExplicitStateUpdater('''
-    k1=dt*f(x,t)
-    k2=dt*f(x+k1/2,t+dt/2)
-    k3=dt*f(x+k2/2,t+dt/2)
-    k4=dt*f(x+k3,t+dt)
-    return x+(k1+2*k2+2*k3+k4)/6
+    k_1=dt*f(x,t)
+    k_2=dt*f(x+k_1/2,t+dt/2)
+    k_3=dt*f(x+k_2/2,t+dt/2)
+    k_4=dt*f(x+k_3,t+dt)
+    return x+(k_1+2*k_2+2*k_3+k_4)/6
     ''')
 
 #: Derivative-free Milstein method
@@ -522,10 +552,3 @@ milstein = ExplicitStateUpdater('''
     k = 1/(2*dt**.5)*(g_support - g(x, t))*(dW**2)
     return x + dt*f(x,t) + g(x, t) * dW + k
     ''', stochastic='multiplicative')
-
-# Register the state updaters in the order in which they should be chosen by
-# default
-StateUpdateMethod.register('euler', euler)
-StateUpdateMethod.register('rk2', rk2)
-StateUpdateMethod.register('rk4', rk4)
-StateUpdateMethod.register('milstein', milstein)
