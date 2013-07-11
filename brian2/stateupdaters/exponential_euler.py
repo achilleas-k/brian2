@@ -1,5 +1,7 @@
 import sympy as sp
 
+from brian2.codegen.parsing import sympy_to_str
+
 from .base import StateUpdateMethod
 
 __all__ = ['exponential_euler']
@@ -34,7 +36,7 @@ def get_conditionally_linear_system(eqs):
     ... """)
     >>> system = get_conditionally_linear_system(eqs)
     >>> print(system['v'])
-    (-1/tau, w**2/tau)
+    (-1/tau, w**2.0/tau)
     >>> print(system['w'])
     (-1/tau, 0)
 
@@ -99,19 +101,21 @@ class ExponentialEulerStateUpdater(StateUpdateMethod):
         for var, (A, B) in system.iteritems():
             s_var = sp.Symbol(var)
             s_dt = sp.Symbol('dt')
-            if B != 0:
+            if A == 0:
+                update_expression = s_var + s_dt * B
+            elif B != 0:
                 BA = B / A
                 # Avoid calculating B/A twice
                 BA_name = '_BA_' + var
                 s_BA = sp.Symbol(BA_name)
-                code += [BA_name + ' = ' + str(BA)]
+                code += [BA_name + ' = ' + sympy_to_str(BA)]
                 update_expression = (s_var + s_BA)*sp.exp(A*s_dt) - s_BA
             else:
                 update_expression = s_var*sp.exp(A*s_dt)
                 
             # The actual update step
             update = '_{var} = {expr}'
-            code += [update.format(var=var, expr=update_expression)]
+            code += [update.format(var=var, expr=sympy_to_str(update_expression))]
         
         # Replace all the variables with their updated value
         for var in system:

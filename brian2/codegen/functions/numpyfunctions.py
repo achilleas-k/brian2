@@ -3,13 +3,14 @@ from sympy import Function as sympy_Function
 from sympy.core import power as sympy_power
 from sympy.core import mod as sympy_mod
 import numpy as np
-from numpy.random import randn
+from numpy.random import randn, rand
 
 import brian2.units.unitsafefunctions as unitsafe
 
 from .base import Function
 
 __all__ = ['RandnFunction', 'FunctionWrapper', 'DEFAULT_FUNCTIONS']
+
 
 class RandnFunction(Function):
     '''
@@ -24,7 +25,7 @@ class RandnFunction(Function):
         The number of random numbers generated at a time.
     '''
     def __init__(self, N):
-        Function.__init__(self, pyfunc=randn)
+        Function.__init__(self, pyfunc=randn, arg_units=[], return_unit=1)
         self.N = int(N)
     
     def __call__(self):
@@ -38,11 +39,11 @@ class RandnFunction(Function):
         // it asks numpy's randn function for N (e.g. the number of neurons)
         // random numbers at a time and then returns one number from this
         // buffer.
-        // It needs a reference ot the _randn object (the original numpy
+        // It needs a reference to the numpy_randn object (the original numpy
         // function), because this is otherwise only available in
         // compiled_function (where is is automatically handled by weave).
         // 
-        double randn(py::object& _randn) {        
+        double _call_randn(py::object& numpy_randn) {
             static PyArrayObject *randn_buffer = NULL;
             static double *buf_pointer = NULL;
             static npy_int curbuffer = 0;
@@ -51,7 +52,7 @@ class RandnFunction(Function):
                 if(randn_buffer) Py_DECREF(randn_buffer);
                 py::tuple args(1);
                 args[0] = BUFFER_SIZE;
-                randn_buffer = (PyArrayObject *)PyArray_FromAny(_randn.call(args), NULL, 1, 1, 0, NULL);
+                randn_buffer = (PyArrayObject *)PyArray_FromAny(numpy_randn.call(args), NULL, 1, 1, 0, NULL);
                 buf_pointer = (double*)PyArray_GETPTR1(randn_buffer, 0);
             }
             double number = buf_pointer[curbuffer];
@@ -65,14 +66,50 @@ class RandnFunction(Function):
         '''.replace('%VAR%', var).replace('%N%', str(self.N))
 
         hashdefine_code = '''
-        #define randn() randn(_randn)
-        '''.replace('%VAR%', var)
-        
+        #define _randn() _call_randn(_python_randn)
+        '''
+
         return {'support_code': support_code,
                 'hashdefine_code': hashdefine_code}
     
     def on_compile_cpp(self, namespace, language, var):
         pass
+
+
+class RandFunction(Function):
+    '''
+    A specifier for the rand function, allowing its use both in Python and
+    C++ code (e.g. for synaptic connectivity). In Python, a `rand()` call will
+    return `N` random numbers (e.g. the size of the `NeuronGroup`), in C++ it
+    will return a single number.
+
+    Parameters
+    ----------
+    N : int
+        The number of random numbers generated at a time.
+    '''
+    def __init__(self, N):
+        Function.__init__(self, pyfunc=rand, arg_units=[], return_unit=1)
+        self.N = int(N)
+
+    def __call__(self):
+        return rand(self.N)
+
+    def code_cpp(self, language, var):
+
+        support_code = '''
+        double _rand()
+        {
+	        return (double)rand()/RAND_MAX;
+        }
+        '''
+
+        return {'support_code': support_code,
+                'hashdefine_code': ''}
+
+    def on_compile_cpp(self, namespace, language, var):
+        pass
+
 
 class FunctionWrapper(Function):
     '''
@@ -90,11 +127,24 @@ class FunctionWrapper(Function):
     cpp_name : str, optional
         The name of the corresponding function in C++, in case it is different.        
     sympy_func : sympy function, optional
-        The corresponding sympy function, if it exists. 
+        The corresponding sympy function, if it exists.
+    arg_units : list of `Unit`, optional
+        The expected units of the arguments, ``None`` for arguments that can
+        have arbitrary units. Needs only to be specified if the `pyfunc`
+        function does not specify this already (e.g. via a `check_units`
+        decorator)
+    return_unit : `Unit` or callable, optional
+        The unit of the return value of this function. Either a fixed `Unit`,
+        or a function of the units of the arguments, e.g.
+        ``lambda u : u **0.5`` for a square root function. Needs only to be
+        specified if the `pyfunc` function does not specify this already (e.g.
+        via a `check_units` decorator)
     '''
     # TODO: How to make this easily extendable for other languages?
-    def __init__(self, pyfunc, py_name=None, cpp_name=None, sympy_func=None):
-        Function.__init__(self, pyfunc, sympy_func)
+    def __init__(self, pyfunc, py_name=None, cpp_name=None, sympy_func=None,
+                 arg_units=None, return_unit=None):
+        Function.__init__(self, pyfunc, sympy_func, arg_units=arg_units,
+                          return_unit=return_unit)
         if py_name is None:
             py_name = pyfunc.__name__
         self.py_name = py_name
@@ -109,15 +159,17 @@ class FunctionWrapper(Function):
         return {'support_code': '',
                 'hashdefine_code': hashdefine_code}
 
-def _get_default_functions():
 
-    # sympy does not have a log10 function, so let's define one
-    class log10(sympy_Function):        
-        nargs = 1
-        
-        @classmethod
-        def eval(cls, args):
-            return sympy.functions.elementary.exponential.log(args, 10)
+# sympy does not have a log10 function, so let's define one
+class log10(sympy_Function):
+    nargs = 1
+
+    @classmethod
+    def eval(cls, args):
+        return sympy.functions.elementary.exponential.log(args, 10)
+
+
+def _get_default_functions():
             
     functions = { 
                 # numpy functions that have the same name in numpy and math.h
@@ -140,11 +192,14 @@ def _get_default_functions():
                 'log10': FunctionWrapper(unitsafe.log10,
                                          sympy_func=log10),
                 'sqrt': FunctionWrapper(np.sqrt,
-                                        sympy_func=sympy.functions.elementary.miscellaneous.sqrt),
+                                        sympy_func=sympy.functions.elementary.miscellaneous.sqrt,
+                                        arg_units=[None], return_unit=lambda u: u**0.5),
                 'ceil': FunctionWrapper(np.ceil,
-                                        sympy_func=sympy.functions.elementary.integers.ceiling),
+                                        sympy_func=sympy.functions.elementary.integers.ceiling,
+                                        arg_units=[None], return_unit=lambda u: u),
                 'floor': FunctionWrapper(np.floor,
-                                         sympy_func=sympy.functions.elementary.integers.floor),     
+                                         sympy_func=sympy.functions.elementary.integers.floor,
+                                         arg_units=[None], return_unit=lambda u: u),
                 # numpy functions that have a different name in numpy and math.h
                 'arccos': FunctionWrapper(unitsafe.arccos,
                                           cpp_name='acos',
@@ -154,16 +209,15 @@ def _get_default_functions():
                                           sympy_func=sympy.functions.elementary.trigonometric.asin),
                 'arctan': FunctionWrapper(unitsafe.arctan,
                                           cpp_name='atan',
-                                          sympy_func=sympy.functions.elementary.trigonometric.atan),                      
-                'power': FunctionWrapper(np.power,
-                                         cpp_name='pow',
-                                         sympy_func=sympy_power.Pow),
+                                          sympy_func=sympy.functions.elementary.trigonometric.atan),
                 'abs': FunctionWrapper(np.abs, py_name='abs',
                                        cpp_name='fabs',
-                                       sympy_func=sympy.functions.elementary.complexes.Abs),
+                                       sympy_func=sympy.functions.elementary.complexes.Abs,
+                                       arg_units=[None], return_unit=lambda u: u),
                 'mod': FunctionWrapper(np.mod, py_name='mod',
                                        cpp_name='fmod',
-                                       sympy_func=sympy_mod.Mod)
+                                       sympy_func=sympy_mod.Mod,
+                                       arg_units=[None, None], return_unit=lambda u,v : u)
                  }
     
     return functions

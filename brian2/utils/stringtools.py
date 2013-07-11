@@ -9,6 +9,7 @@ __all__ = ['indent',
            'word_substitute',
            'get_identifiers',
            'strip_empty_lines',
+           'stripped_deindented_lines',
            ]
 
 def indent(text, numtabs=1, spacespertab=4, tab=None):
@@ -132,6 +133,9 @@ def word_substitute(expr, substitutions):
         expr = re.sub(r'\b' + var + r'\b', str(replace_var), expr)
     return expr
 
+
+KEYWORDS = set(['and', 'or', 'not', 'True', 'False'])
+
 def get_identifiers(expr):
     '''
     Return all the identifiers in a given string ``expr``, that is everything
@@ -146,7 +150,8 @@ def get_identifiers(expr):
     >>> print(sorted(list(ids)))
     ['A', '_b', 'a', 'c5', 'f']
     '''
-    return set(re.findall(r'\b[A-Za-z_][A-Za-z0-9_]*\b', expr))
+    identifiers = set(re.findall(r'\b[A-Za-z_][A-Za-z0-9_]*\b', expr))
+    return identifiers - KEYWORDS
 
 def strip_empty_lines(s):
     '''
@@ -163,3 +168,12 @@ def strip_empty_lines(s):
     an empty line.
     '''
     return '\n'.join(line for line in s.split('\n') if line.strip())
+
+def stripped_deindented_lines(code):
+    '''
+    Returns a list of the lines in a multi-line string, deindented.
+    '''
+    code = deindent(code)
+    code = strip_empty_lines(code)
+    lines = code.split('\n')
+    return lines

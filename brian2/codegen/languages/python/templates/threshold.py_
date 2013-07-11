@@ -1,0 +1,9 @@
+# USE_SPECIFIERS { not_refractory, lastspike, t }
+
+{% for line in code_lines %}
+{{line}}
+{% endfor %}
+_return_values, = _cond.nonzero()
+# Set the neuron to refractory
+not_refractory[_return_values] = False
+lastspike[_return_values] = t

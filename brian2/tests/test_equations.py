@@ -69,7 +69,7 @@ def test_identifier_checks():
     for identifier in ('t', 'dt', 'xi'):
         assert_raises(ValueError, lambda: check_identifier_reserved(identifier))
 
-    for identifier in ('is_active', 'refractory', 'refractory_until'):
+    for identifier in ('not_refractory', 'refractory', 'refractory_until'):
         assert_raises(ValueError, lambda: check_identifier_refractory(identifier))
 
     for identifier in ('exp', 'sin', 'sqrt'):
@@ -115,12 +115,15 @@ def test_parse_equations():
                                     dge/dt = -ge / tau_ge : volt
                                     I = sin(2 * pi * f * t) : volt
                                     f : Hz (constant)
+                                    b : bool
                                  ''')
-    assert len(eqs.keys()) == 4
+    assert len(eqs.keys()) == 5
     assert 'v' in eqs and eqs['v'].type == DIFFERENTIAL_EQUATION
     assert 'ge' in eqs and eqs['ge'].type == DIFFERENTIAL_EQUATION
     assert 'I' in eqs and eqs['I'].type == STATIC_EQUATION
     assert 'f' in eqs and eqs['f'].type == PARAMETER
+    assert 'b' in eqs and eqs['b'].type == PARAMETER
+    assert not eqs['f'].is_bool and eqs['b'].is_bool
     assert get_dimensions(eqs['v'].unit) == volt.dim
     assert get_dimensions(eqs['ge'].unit) == volt.dim
     assert get_dimensions(eqs['I'].unit) == volt.dim
@@ -140,10 +143,12 @@ def test_parse_equations():
         x = 2 * t : 1''',
     '''dv/dt = -v / tau : 1 : volt
     x = 2 * t : 1''',
-    ''' dv/dt = -v / tau : 2 * volt''']
+    ''' dv/dt = -v / tau : 2 * volt''',
+    'dv/dt = v / second : bool']
     for error_eqs in parse_error_eqs:
         assert_raises((ValueError, EquationError),
                       lambda: parse_string_equations(error_eqs))
+
 
 
 def test_correct_replacements():
@@ -160,31 +165,33 @@ def test_correct_replacements():
     eqs = Equations('dv/dt = -v / tau : 1', tau=10 * ms)
     assert not 'tau' in eqs['v'].identifiers
 
+
 def test_wrong_replacements():
     '''Tests for replacements that should not work'''
 
     # Replacing a variable name with an illegal new name
-    assert_raises(ValueError, lambda : Equations('dv/dt = -v / tau : 1',
-                                                 v='illegal name'))
-    assert_raises(ValueError, lambda : Equations('dv/dt = -v / tau : 1',
-                                                 v='_reserved'))
-    assert_raises(ValueError, lambda : Equations('dv/dt = -v / tau : 1',
-                                                 v='t'))
+    assert_raises(ValueError, lambda: Equations('dv/dt = -v / tau : 1',
+                                                v='illegal name'))
+    assert_raises(ValueError, lambda: Equations('dv/dt = -v / tau : 1',
+                                                v='_reserved'))
+    assert_raises(ValueError, lambda: Equations('dv/dt = -v / tau : 1',
+                                                v='t'))
 
     # Replacing a variable name with a value that already exists
-    assert_raises(EquationError, lambda : Equations('''
+    assert_raises(EquationError, lambda: Equations('''
                                                     dv/dt = -v / tau : 1
                                                     dx/dt = -x / tau : 1
                                                     ''',
-                                                    v='x'))
+                                                   v='x'))
 
     # Replacing a model variable name with a value
-    assert_raises(ValueError, lambda : Equations('dv/dt = -v / tau : 1',
-                                                 v=3 * mV))
+    assert_raises(ValueError, lambda: Equations('dv/dt = -v / tau : 1',
+                                                v=3 * mV))
 
     # Replacing with an illegal value
-    assert_raises(ValueError, lambda : Equations('dv/dt = -v/tau : 1',
+    assert_raises(SyntaxError, lambda: Equations('dv/dt = -v/tau : 1',
                                                  tau=np.arange(5)))
+
 
 def test_construction_errors():
     '''
@@ -203,9 +210,9 @@ def test_construction_errors():
                                                     v = 2 * t/second * volt : volt'''))
 
     eqs = [SingleEquation(DIFFERENTIAL_EQUATION, 'v', volt,
-                          Expression('-v / tau')),
+                          expr=Expression('-v / tau')),
            SingleEquation(STATIC_EQUATION, 'v', volt,
-                          Expression('2 * t/second * volt'))
+                          expr=Expression('2 * t/second * volt'))
            ]
     assert_raises(EquationError, lambda: Equations(eqs))
 
@@ -367,7 +374,7 @@ def test_str_repr():
     Test the string representation (only that it does not throw errors).
     '''
     tau = 10 * ms
-    eqs = Equations('''dv/dt = -(v + I)/ tau : volt (active)
+    eqs = Equations('''dv/dt = -(v + I)/ tau : volt (unless-refractory)
                        I = sin(2 * 22/7. * f * t)* volt : volt
                        f : Hz''')
     assert len(str(eqs)) > 0

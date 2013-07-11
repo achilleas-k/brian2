@@ -18,9 +18,11 @@ from brian2.core.specifiers import (ReadOnlyValue, AttributeValue, ArrayVariable
                                     StochasticVariable, Subexpression)
 from brian2.core.spikesource import SpikeSource
 from brian2.core.scheduler import Scheduler
+from brian2.parsing.expressions import parse_expression_unit, is_boolean_expression
 from brian2.utils.logger import get_logger
 from brian2.units.allunits import second
-from brian2.units.fundamentalunits import Unit
+from brian2.units.fundamentalunits import (Quantity, Unit, have_same_dimensions,
+                                           DIMENSIONLESS)
 
 from .group import Group, GroupCodeRunner
 
@@ -48,15 +50,44 @@ class StateUpdater(GroupCodeRunner):
                                                                self.group.specifiers,
                                                                method)
     
-    def update_abstract_code(self):        
+    def update_abstract_code(self, additional_namespace):
         
         self.method = StateUpdateMethod.determine_stateupdater(self.group.equations,
                                                                self.group.namespace,
                                                                self.group.specifiers,
                                                                self.method_choice)
 
-        # Update the is_active variable for the refractory period mechanism
-        self.abstract_code = 'is_active = 1* (t >= refractory_until)\n'
+        # Update the not_refractory variable for the refractory period mechanism
+        ref = self.group._refractory
+        if ref is None:
+            # No refractoriness
+            self.abstract_code = ''
+        elif isinstance(ref, Quantity):
+            self.abstract_code = 'not_refractory = (t - lastspike) > %f\n' % ref
+        else:
+            namespace = dict(self.group.namespace)
+            if additional_namespace is not None:
+                namespace.update(additional_namespace[1])
+            unit = parse_expression_unit(str(ref), namespace,
+                                         self.group.specifiers)
+            if have_same_dimensions(unit, second):
+                self.abstract_code = 'not_refractory = (t - lastspike) > %s\n' % ref
+            elif have_same_dimensions(unit, Unit(1)):
+                if not is_boolean_expression(str(ref), namespace,
+                                             self.group.specifiers):
+                    raise TypeError(('Refractory expression is dimensionless '
+                                     'but not a boolean value. It needs to '
+                                     'either evaluate to a timespan or to a '
+                                     'boolean value.'))
+                # boolean condition
+                # we have to be a bit careful here, we can't just use the given
+                # condition as it is, because we only want to *leave*
+                # refractoriness, based on the condition
+                self.abstract_code = 'not_refractory = not_refractory or not (%s)\n' % ref
+            else:
+                raise TypeError(('Refractory expression has to evaluate to a '
+                                 'timespan or a boolean value, expression'
+                                 '"%s" has units %s instead') % (ref, unit))
         
         self.abstract_code += self.method(self.group.equations,
                                           self.group.namespace,
@@ -73,14 +104,9 @@ class Thresholder(GroupCodeRunner):
         GroupCodeRunner.__init__(self, group,
                                  group.language.template_threshold,
                                  when=(group.clock, 'thresholds'),
-                                 name=group.name+'_thresholder*',
-                                 # TODO: This information should be included in
-                                 # the template instead
-                                 additional_specifiers=['t',
-                                                        'refractory_until',
-                                                        'refractory'])
+                                 name=group.name+'_thresholder*')
     
-    def update_abstract_code(self):
+    def update_abstract_code(self, namespace):
         self.abstract_code = '_cond = ' + self.group.threshold
         
     def post_update(self, return_value):
@@ -98,21 +124,16 @@ class Resetter(GroupCodeRunner):
                                  group.language.template_reset,
                                  when=(group.clock, 'resets'),
                                  name=group.name+'_resetter*',
-                                 iterate_all=False,
-                                 additional_specifiers=['_spikes'])
+                                 iterate_all=False)
     
-    def update_abstract_code(self):
+    def update_abstract_code(self, namespace):
         self.abstract_code = self.group.reset
 
 
 class NeuronGroup(BrianObject, Group, SpikeSource):
     '''
-    Group of neurons
-    
-    In addition to the variable names you create, `NeuronGroup` will have an
-    additional state variable ``refractory`` (in units of seconds) which 
-    gives the absolute refractory period of the neuron. This value can be
-    modified in the reset code. (TODO: more modifiability)
+    A group of neurons.
+
     
     Parameters
     ----------
@@ -130,6 +151,12 @@ class NeuronGroup(BrianObject, Group, SpikeSource):
         expression.
     reset : str, optional
         The (possibly multi-line) string with the code to execute on reset.
+    refractory : {str, `Quantity`}, optional
+        Either the length of the refractory period (e.g. ``2*ms``), a string
+        expression that evaluates to the length of the refractory period
+        after each spike (e.g. ``'(1 + rand())*ms'``), or a string expression
+        evaluating to a boolean value, given the condition under which the
+        neuron stays refractory after a spike (e.g. ``'v > -20*mV'``)
     namespace: dict, optional
         A dictionary mapping variable/function names to the respective objects.
         If no `namespace` is given, the "implicit" namespace, consisting of
@@ -155,6 +182,7 @@ class NeuronGroup(BrianObject, Group, SpikeSource):
     def __init__(self, N, equations, method=None,
                  threshold=None,
                  reset=None,
+                 refractory=False,
                  namespace=None,
                  dtype=None, language=None,
                  clock=None, name='neurongroup*'):
@@ -175,16 +203,20 @@ class NeuronGroup(BrianObject, Group, SpikeSource):
         if not isinstance(equations, Equations):
             raise TypeError(('equations has to be a string or an Equations '
                              'object, is "%s" instead.') % type(equations))
+
+        # Check flags
+        equations.check_flags({DIFFERENTIAL_EQUATION: ('unless-refractory'),
+                               PARAMETER: ('constant')})
+
         # add refractoriness
         equations = add_refractoriness(equations)
         self.equations = equations
+        uses_refractoriness = len(equations) and any(['unless-refractory' in eq.flags
+                                                      for eq in equations.itervalues()
+                                                      if eq.type == DIFFERENTIAL_EQUATION])
 
         logger.debug("Creating NeuronGroup of size {self.N}, "
                      "equations {self.equations}.".format(self=self))
-
-        # Check flags
-        equations.check_flags({DIFFERENTIAL_EQUATION: ('active'),
-                               PARAMETER: ('constant')})
 
         ##### Setup the memory
         self.arrays = self._allocate_memory(dtype=dtype)
@@ -211,7 +243,13 @@ class NeuronGroup(BrianObject, Group, SpikeSource):
         
         #: The reset statement(s)
         self.reset = reset
-        
+
+        #: The refractory condition or timespan
+        self._refractory = refractory
+        if uses_refractoriness and refractory is False:
+            logger.warn('Model equations use the "unless-refractory" flag but '
+                        'no refractory keyword was given.', 'no_refractory')
+
         #: The state update method selected by the user
         self.method_choice = method
         
@@ -247,30 +285,37 @@ class NeuronGroup(BrianObject, Group, SpikeSource):
         # Activate name attribute access
         Group.__init__(self)
 
+        # Set the refractoriness information
+        self.lastspike = -np.inf*second
+        self.not_refractory = True
+
     def __len__(self):
         '''
         Return number of neurons in the group.
         '''
         return self.N
 
-
     def _allocate_memory(self, dtype=None):
         # Allocate memory (TODO: this should be refactored somewhere at some point)
-        arrayvarnames = set(eq.varname for eq in self.equations.itervalues() if
-                            eq.type in (DIFFERENTIAL_EQUATION,
-                                           PARAMETER))
+
         arrays = {}
-        for name in arrayvarnames:
+        for eq in self.equations.itervalues():
+            if eq.type == STATIC_EQUATION:
+                # nothing to do
+                continue
+            name = eq.varname
             if isinstance(dtype, dict):
                 curdtype = dtype[name]
             else:
                 curdtype = dtype
             if curdtype is None:
                 curdtype = brian_prefs['core.default_scalar_dtype']
-            arrays[name] = allocate_array(self.N, dtype=curdtype)
+            if eq.is_bool:
+                arrays[name] = allocate_array(self.N, dtype=np.bool)
+            else:
+                arrays[name] = allocate_array(self.N, dtype=curdtype)
         logger.debug("NeuronGroup memory allocated successfully.")
         return arrays
-
 
     def runner(self, code, when=None, name=None):
         '''
@@ -323,14 +368,16 @@ class NeuronGroup(BrianObject, Group, SpikeSource):
                                                     array.dtype,
                                                     array,
                                                     '_neuron_idx',
-                                                    constant)})
+                                                    constant,
+                                                    eq.is_bool)})
         
             elif eq.type == STATIC_EQUATION:
                 s.update({eq.varname: Subexpression(eq.varname, eq.unit,
                                                     brian_prefs['core.default_scalar_dtype'],
                                                     str(eq.expr),
                                                     s,
-                                                    self.namespace)})
+                                                    self.namespace,
+                                                    eq.is_bool)})
             else:
                 raise AssertionError('Unknown type of equation: ' + eq.eq_type)
 
