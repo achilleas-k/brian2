@@ -27,6 +27,6 @@ nosetests.xml
 .idea
 
 # vim swap files
-.swp
+*.swp
 
 
