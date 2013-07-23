@@ -25,3 +25,8 @@ nosetests.xml
 
 # pycharm project files
 .idea
+
+# vim swap files
+.swp
+
+
