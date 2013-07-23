@@ -63,10 +63,14 @@
                                 }
                                 // Directly add the synapse numbers to the neuron->synapses
                                 // mapping
+                                //
+                                // TODO: Recheck this especially
                                 _synprebuf[0] = _synapse_idx;
                                 _synpostbuf[0] = _synapse_idx;
-                                ArrayList<Integer> _pre_synapses = _pre_synaptic[i];
-                                ArrayList<Integer> _post_synapse = _post_synaptic[j];
+                                ArrayList<Integer> _pre_synapses = new ArrayList<Integer>();
+                                _pre_synapses.add(_pre_synaptic[i]);
+                                ArrayList<Integer> _post_synapse = new ArrayList<Integer>();
+                                _post_synapses.add(_post_synaptic[j]);
                                 _flush_buffer(_synprebuf, _pre_synapses, 1);
                                 _flush_buffer(_synpostbuf, _post_synapses, 1);
                                 _synapse_idx++;

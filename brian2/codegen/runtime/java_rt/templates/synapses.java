@@ -10,19 +10,19 @@
 	{% endfor %}
 
 	////// HANDLE DENORMALS ///
-	{% for line in denormals_code_lines %}
-	{{line}}
-	{% endfor %}
+	//{% for line in denormals_code_lines %}
+	//{{line}}
+	//{% endfor %}
 
-	////// HASH DEFINES ///////
-	{% for line in hashdefine_lines %}
-	{{line}}
-	{% endfor %}
+	//////// HASH DEFINES ///////
+	//{% for line in hashdefine_lines %}
+	//{{line}}
+	//{% endfor %}
 
-	///// POINTERS ////////////
-	{% for line in pointers_lines %}
-	{{line}}
-	{% endfor %}
+	/////// POINTERS ////////////
+	//{% for line in pointers_lines %}
+	//{{line}}
+	//{% endfor %}
 
 	//// MAIN CODE ////////////
 	for(int _spiking_synapse_idx=0;

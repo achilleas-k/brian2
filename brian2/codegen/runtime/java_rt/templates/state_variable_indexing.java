@@ -24,10 +24,9 @@
 	//{% endfor %}
 
 	//// MAIN CODE ////////////
-	int _cpp_numelements = 0;
 	// Container for all the potential indices
         // Fixed size? Maybe change to regular array
-        ArrayList<Integer> _elements = new ArrayList<>();
+        ArrayList<Integer> _elements = new ArrayList<Integer>();
 	for(int _neuron_idx=0; _neuron_idx<_num_neurons; _neuron_idx++)
 	{
 	    const int _vectorisation_idx = _neuron_idx; // ???
@@ -35,7 +34,8 @@
 		{{line}}
 		{% endfor %}
 		if(_cond) {
-			_elements.add(_neuron_idx);
+                    _elements.add(_neuron_idx);
+
 		}
 	}
 	return_val = _elements.size()
