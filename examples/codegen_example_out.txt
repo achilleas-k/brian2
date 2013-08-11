@@ -1,0 +1,43 @@
+//*********** PUBLIC VARS **********
+boolean[] _array_gp_not_refractory;
+double[] _array_gp_lastspike;
+double[] _array_gp_V;
+//*********** SETUP METHOD *********
+public void setup() {
+_array_gp_not_refractory = new boolean [1000];
+_array_gp_lastspike = new double [1000];
+_array_gp_V = new double [1000];
+}
+//*********** MAIN LOOP *************
+public void run() {
+final int _num_neurons = 1000;
+final int _numV = 1000;
+final int _numnot_refractory = 1000;
+final double tau = 0.01;
+final int _numlastspike = 1000;
+// USE_SPECIFIERS { _num_neurons }
+
+////// SUPPORT CODE ///
+//
+
+////// HANDLE DENORMALS ///
+//
+////// HASH DEFINES ///////
+//
+///// POINTERS ////////////
+//
+//// MAIN CODE ////////////
+for(int _neuron_idx=0; _neuron_idx<_num_neurons; _neuron_idx++)
+{
+    final int _vectorisation_idx = _neuron_idx;
+    final double lastspike = _array_gp_lastspike[_neuron_idx];
+    boolean not_refractory = _array_gp_not_refractory[_neuron_idx];
+    double V = _array_gp_V[_neuron_idx];
+    not_refractory = 1 * (t - lastspike > 0.005);
+    final double _V = V * Math.exp(-(dt) * not_refractory / tau);
+    V = _V;
+    _array_gp_not_refractory[_neuron_idx] = not_refractory;
+    _array_gp_V[_neuron_idx] = V;
+}
+
+}
