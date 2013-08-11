@@ -11,7 +11,7 @@ from brian2.codegen.functions.base import Function
 from brian2.utils.logger import get_logger
 
 from .base import Language
-from brian2.parsing.rendering import CPPNodeRenderer
+from brian2.parsing.rendering import JavaNodeRenderer
 
 from brian2.core.preferences import brian_prefs, BrianPreference
 
@@ -85,7 +85,7 @@ class JavaLanguage(Language):
         pass
 
     def translate_expression(self, expr):
-        return CPPNodeRenderer().render_expr(expr).strip()
+        return JavaNodeRenderer().render_expr(expr).strip()
 
     def translate_statement(self, statement):
         var, op, expr = statement.var, statement.op, statement.expr
@@ -93,7 +93,7 @@ class JavaLanguage(Language):
             decl = java_data_type(statement.dtype) + ' '
             op = '='
             if statement.constant:
-                decl = 'const ' + decl
+                decl = 'final ' + decl
         else:
             decl = ''
         return decl + var + ' ' + op + ' ' +\
@@ -109,7 +109,7 @@ class JavaLanguage(Language):
             index_spec = indices[index_var]
             spec = specifiers[var]
             if var not in write:
-                line = 'const '
+                line = 'final '
             else:
                 line = ''
             line = line + java_data_type(spec.dtype) + ' ' + var + ' = '
@@ -135,15 +135,15 @@ class JavaLanguage(Language):
         # set up the functions
         user_functions = []
         support_code = ''
-        for var, spec in itertools.chain(namespace.items(),
-                                         specifiers.items()):
-            if isinstance(spec, Function):
-                user_functions.append(var)
-                speccode = spec.code(self, var)
-                support_code += '\n' + deindent(speccode['support_code'])
-        # delete the user-defined functions from the namespace
-        for func in user_functions:
-            del namespace[func]
+        #for var, spec in itertools.chain(namespace.items(),
+        #                                 specifiers.items()):
+        #    if isinstance(spec, Function):
+        #        user_functions.append(var)
+        #        speccode = spec.code(self, var)
+        #        support_code += '\n' + deindent(speccode['support_code'])
+        ## delete the user-defined functions from the namespace
+        #for func in user_functions:
+        #    del namespace[func]
 
         # return
         return (stripped_deindented_lines(code),

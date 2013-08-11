@@ -35,7 +35,7 @@
 	{
 		for(int j=0; j<_num_target_neurons; j++)
 		{
-		    const int _vectorisation_idx = j;
+		    final int _vectorisation_idx = j;
 			// Define the condition
 			{% for line in code_lines %}
 			{{line}}
@@ -105,3 +105,6 @@ void _flush_buffer(int[] buf, ArrayList<Integer> data, int N)
 {% endfor %}
 
 {% endmacro %}
+
+
+

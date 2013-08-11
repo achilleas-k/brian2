@@ -7,7 +7,8 @@ from brian2.codegen.functions.numpyfunctions import DEFAULT_FUNCTIONS
 __all__ = ['NodeRenderer',
            'NumpyNodeRenderer',
            'CPPNodeRenderer',
-           'SympyNodeRenderer'
+           'SympyNodeRenderer',
+           'JavaNodeRenderer',
            ]
 
 
@@ -228,4 +229,36 @@ class CPPNodeRenderer(NodeRenderer):
 
     def render_Assign(self, node):
         return NodeRenderer.render_Assign(self, node)+';'
+
+
+class JavaNodeRenderer(NodeRenderer):
+    expression_ops = NodeRenderer.expression_ops.copy()
+    expression_ops.update({
+          # Unary ops
+          'Not': '!',
+          # Bool ops
+          'And': '&&',
+          'Or': '||',
+          })
+    
+    def render_BinOp(self, node):
+        if node.op.__class__.__name__=='Pow':
+            return 'Math.pow(%s, %s)' % (self.render_node(node.left),
+                                    self.render_node(node.right))
+        else:
+            return NodeRenderer.render_BinOp(self, node)
+
+    def render_Name(self, node):
+        return {'True': 'true',
+                'False': 'false',
+                # TODO: This should be handled differently
+                'randn': '_randn',
+                'rand': 'rng.nextFloat',
+                'clip': '_clip',
+                'exp': 'Math.exp',
+                'bool': '_bool'}.get(node.id, node.id)
+
+    def render_Assign(self, node):
+        return NodeRenderer.render_Assign(self, node)+';'
+
 

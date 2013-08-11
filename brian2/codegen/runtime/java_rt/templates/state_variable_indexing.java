@@ -29,7 +29,7 @@
         ArrayList<Integer> _elements = new ArrayList<Integer>();
 	for(int _neuron_idx=0; _neuron_idx<_num_neurons; _neuron_idx++)
 	{
-	    const int _vectorisation_idx = _neuron_idx; // ???
+	    final int _vectorisation_idx = _neuron_idx; // ???
 		{% for line in code_lines %}
 		{{line}}
 		{% endfor %}
@@ -49,3 +49,6 @@
 	// {{line}}
 	{% endfor %}
 {% endmacro %}
+
+
+

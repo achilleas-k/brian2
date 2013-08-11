@@ -22,8 +22,8 @@
 	//// MAIN CODE ////////////
 	for(int _index__spikes=0; _index__spikes<_num_spikes; _index__spikes++)
 	{
-		const int _neuron_idx = _spikes[_index__spikes];
-		const int _vectorisation_idx = _neuron_idx;
+		final int _neuron_idx = _spikes[_index__spikes];
+		final int _vectorisation_idx = _neuron_idx;
 		{% for line in code_lines %}
 		{{line}}
 		{% endfor %}
@@ -38,3 +38,5 @@
 	{{line}}
 	{% endfor %}
 {% endmacro %}
+
+
