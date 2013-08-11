@@ -4,7 +4,7 @@ TODO: modify this so to just generate snippets
 from numpy import *
 from brian2 import *
 from brian2.utils.stringtools import *
-from brian2.codegen.languages.cpp_lang import *
+from brian2.codegen.languages.java_lang import *
 
 ##### Define the model
 tau = 10*ms
@@ -39,14 +39,22 @@ for k, v in ns.items():
         code = ('final int %s = %s;\n' % (k, repr(v)))+code
     elif isinstance(v, ndarray):
         if k.startswith('_array'):
-            dtype_spec = c_data_type(v.dtype)
+            dtype_spec = java_data_type(v.dtype)
             arrays.append((k, dtype_spec, N))
 
-print '*********** DECLARATIONS **********'
-# This is just an example of what you could do with declarations, generate your
-# own code here...
-for varname, dtype_spec, N in arrays:
-    print '%s %s = new %s [%s];' % (dtype_spec, varname, dtype_spec, N)
 
-print '*********** MAIN LOOP *************'
+print '//*********** PUBLIC VARS **********'
+for varname, dtype_spec, N in arrays:
+    print '%s[] %s;' % (dtype_spec, varname)
+
+print '//*********** SETUP METHOD *********'
+print 'public void setup() {'
+for varname, dtype_spec, N in arrays:
+    print '%s = new %s [%s];' % (varname, dtype_spec, N)
+print '}'
+
+print '//*********** MAIN LOOP *************'
+print 'public void run() {'
 print code
+print '}'
+
