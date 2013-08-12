@@ -1,3 +1,4 @@
+from numpy import *
 from brian2 import *
 from brian2.utils.stringtools import *
 from brian2.codegen.languages.java_lang import *
