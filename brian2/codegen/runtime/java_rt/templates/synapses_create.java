@@ -8,21 +8,6 @@
 	// {{line}}
 	{% endfor %}
 
-	////// HANDLE DENORMALS ///
-	//{% for line in denormals_code_lines %}
-	//{{line}}
-	//{% endfor %}
-
-	//////// HASH DEFINES ///////
-	//{% for line in hashdefine_lines %}
-	//{{line}}
-	//{% endfor %}
-
-	/////// POINTERS ////////////
-	//{% for line in pointers_lines %}
-	//{{line}}
-	//{% endfor %}
-
 	srand((unsigned int)time(NULL));
 	int _buffer_size = 1024;
 	int[] _prebuf = new int[_buffer_size];

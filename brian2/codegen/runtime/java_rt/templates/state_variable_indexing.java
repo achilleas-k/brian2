@@ -8,21 +8,6 @@
 	// {{line}}
 	{% endfor %}
 
-	////// HANDLE DENORMALS ///
-	//{% for line in denormals_code_lines %}
-	//{{line}}
-	//{% endfor %}
-
-	////// HASH DEFINES ///////
-	//{% for line in hashdefine_lines %}
-	//{{line}}
-	//{% endfor %}
-
-	///// POINTERS ////////////
-	//{% for line in pointers_lines %}
-	//{{line}}
-	//{% endfor %}
-
 	//// MAIN CODE ////////////
 	// Container for all the potential indices
         // Fixed size? Maybe change to regular array

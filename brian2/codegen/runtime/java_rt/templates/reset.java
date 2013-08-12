@@ -1,23 +1,7 @@
-////////////////////////////////////////////////////////////////////////////
 //// MAIN CODE /////////////////////////////////////////////////////////////
 
 {% macro main() %}
 	// USE_SPECIFIERS { _spikes }
-
-	////// HANDLE DENORMALS ///
-	//{% for line in denormals_code_lines %}
-	//{{line}}
-	//{% endfor %}
-
-	////// HASH DEFINES ///////
-	//{% for line in hashdefine_lines %}
-	//{{line}}
-	//{% endfor %}
-
-	///// POINTERS ////////////
-	//{% for line in pointers_lines %}
-	//{{line}}
-	//{% endfor %}
 
 	//// MAIN CODE ////////////
 	for(int _index__spikes=0; _index__spikes<_num_spikes; _index__spikes++)

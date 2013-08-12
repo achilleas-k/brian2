@@ -1,26 +1,9 @@
-////////////////////////////////////////////////////////////////////////////
 //// MAIN CODE /////////////////////////////////////////////////////////////
 
 {% macro main() %}
 
     // USE_SPECIFIERS { _synaptic_post, _synaptic_pre, _num_target_neurons }
 
-	////// HANDLE DENORMALS ///
-	//{% for line in denormals_code_lines %}
-	//{{line}}
-	//{% endfor %}
-
-	////// HASH DEFINES ///////
-	//{% for line in hashdefine_lines %}
-	//{{line}}
-	//{% endfor %}
-
-	///// POINTERS ////////////
-	//{% for line in pointers_lines %}
-	//{{line}}
-	//{% endfor %}
-
-	//// MAIN CODE ////////////
 
 	// Set all the target variable values to zero
 	for (int _target_idx=0; _target_idx<_num_target_neurons; _target_idx++)
