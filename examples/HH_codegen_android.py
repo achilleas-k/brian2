@@ -8,9 +8,6 @@ from brian2.codegen.languages.java_lang import *
 
 ##### Define the model
 tau = 10*ms
-#eqs = '''
-#dV/dt = -V/tau : volt (unless-refractory)
-#'''
 
 # Parameters
 area = 20000 * umetre ** 2
