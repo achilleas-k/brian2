@@ -10,6 +10,8 @@
 
 	//// MAIN CODE ////////////
 	ArrayList<Integer> _spikes_space = new ArrayList<Integer>();
+        // TODO: use normal array so I can pass to renderscript and add an extra variable for the number of spikes
+        // array size would be number of neurons
 	for(int _neuron_idx=0; _neuron_idx<_num_neurons; _neuron_idx++)
 	{
 	    final int _vectorisation_idx = _neuron_idx;
