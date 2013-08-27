@@ -263,11 +263,8 @@ class SingleEquation(object):
                            doc='All identifiers in the RHS of this equation.')
 
     def _latex(self, *args):
-        varname = sympy.Symbol(self.varname)
-        t = sympy.Symbol('t')
-        sympy_expr = sympy.Eq(sympy.Derivative(varname, t),
-                              str_to_sympy(self.expr))
-        return sympy.latex(sympy_expr)
+        return (r'\frac{\mathrm{d}' + sympy.latex(self.varname) + r'}{\mathrm{d}t} = ' +
+                sympy.latex(str_to_sympy(self.expr.code)))
 
     def __str__(self):
         if self.type == DIFFERENTIAL_EQUATION:
@@ -699,7 +696,7 @@ class Equations(collections.Mapping):
             elif eq.type == PARAMETER:
                 eq.update_order = len(sorted_eqs) + 1
 
-    def check_units(self, namespace, specifiers, additional_namespace=None):
+    def check_units(self, namespace, variables, additional_namespace=None):
         '''
         Check all the units for consistency.
         
@@ -708,8 +705,8 @@ class Equations(collections.Mapping):
         namespace : `CompoundNamespace`
             The namespace for resolving external identifiers, should be
             provided by the `NeuronGroup` or `Synapses`.
-        specifiers : dict of `Specifier` objects
-            The specifiers of the state variables and internal variables
+        variables : dict of `Variable` objects
+            The variables of the state variables and internal variables
             (e.g. t and dt)
         additional_namespace = (str, dict-like)
             A namespace tuple (name and dictionary), describing the additional
@@ -724,7 +721,7 @@ class Equations(collections.Mapping):
         '''
         external = frozenset().union(*[expr.identifiers
                                      for _, expr in self.eq_expressions])
-        external -= set(specifiers.keys()) 
+        external -= set(variables.keys())
 
         resolved_namespace = namespace.resolve_all(external,
                                                    additional_namespace,
@@ -737,10 +734,10 @@ class Equations(collections.Mapping):
 
             if eq.type == DIFFERENTIAL_EQUATION:
                 check_unit(str(eq.expr), self.units[var] / second,
-                           resolved_namespace, specifiers)
+                           resolved_namespace, variables)
             elif eq.type == STATIC_EQUATION:
                 check_unit(str(eq.expr), self.units[var],
-                           resolved_namespace, specifiers)
+                           resolved_namespace, variables)
             else:
                 raise AssertionError('Unknown equation type: "%s"' % eq.type)
 
@@ -794,7 +791,7 @@ class Equations(collections.Mapping):
             # do not use SingleEquations._latex here as we want nice alignment
             varname = sympy.Symbol(eq.varname)
             if eq.type == DIFFERENTIAL_EQUATION:
-                lhs = sympy.Derivative(varname, t)
+                lhs = r'\frac{\mathrm{d}' + sympy.latex(varname) + r'}{\mathrm{d}t}'
             else:
                 # Normal equation or parameter
                 lhs = varname
@@ -814,7 +811,7 @@ class Equations(collections.Mapping):
                                                                    sympy.latex(eq.unit),
                                                                    flag_str)
             equations.append(eq_latex)
-        return r'\begin{align}' + r'\\'.join(equations) + r'\end{align}'
+        return r'\begin{align*}' + (r'\\' + '\n').join(equations) + r'\end{align*}'
 
     def _repr_latex_(self):
         return sympy.latex(self)

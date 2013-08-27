@@ -1,4 +1,5 @@
 import weakref
+from collections import defaultdict
 
 import numpy as np
 
@@ -6,7 +7,7 @@ from brian2.codegen.codeobject import create_codeobject
 from brian2.core.base import BrianObject
 from brian2.core.preferences import brian_prefs
 from brian2.core.scheduler import Scheduler
-from brian2.core.specifiers import ReadOnlyValue, AttributeValue, ArrayVariable
+from brian2.core.variables import ArrayVariable, AttributeVariable, Variable
 from brian2.memory.dynamicarray import DynamicArray1D
 from brian2.units.allunits import second
 from brian2.units.fundamentalunits import Unit
@@ -52,31 +53,30 @@ class SpikeMonitor(BrianObject):
         # create data structures
         self.reinit()
 
-        self.specifiers = {'t': AttributeValue('t', second, np.float64,
-                                               self.clock, 't'),
-                           '_spikes': AttributeValue('_spikes', Unit(1),
-                                                     self.source.spikes.dtype,
-                                                     self.source, 'spikes'),
+        # Handle subgroups correctly
+        start = getattr(self.source, 'start', 0)
+        end = getattr(self.source, 'end', len(self.source))
+
+        self.variables = {'t': AttributeVariable(second, self.clock, 't'),
+                          '_spikespace': self.source.variables['_spikespace'],
                            # The template needs to have access to the
                            # DynamicArray here, having access to the underlying
                            # array is not enough since we want to do the resize
                            # in the template
-                           '_i': ReadOnlyValue('_i', Unit(1), self._i.dtype,
-                                               self._i),
-                           '_t': ReadOnlyValue('_t', Unit(1), self._t.dtype,
-                                               self._t),
+                           '_i': Variable(Unit(1), self._i),
+                           '_t': Variable(Unit(1), self._t),
                            '_count': ArrayVariable('_count', Unit(1),
-                                                   self.count.dtype,
-                                                   self.count, ''),
-                           '_num_source_neurons': ReadOnlyValue('_num_source_neurons',
-                                                                Unit(1), np.int,
-                                                                len(self.source))}
+                                                   self.count),
+                           '_source_start': Variable(Unit(1), start,
+                                                     constant=True),
+                           '_source_end': Variable(Unit(1), end,
+                                                   constant=True)}
 
     def reinit(self):
         '''
         Clears all recorded spikes
         '''
-        self._i = DynamicArray1D(0, use_numpy_resize=True, dtype=int)
+        self._i = DynamicArray1D(0, use_numpy_resize=True, dtype=np.int32)
         self._t = DynamicArray1D(0, use_numpy_resize=True,
                                  dtype=brian_prefs['core.default_scalar_dtype'])
         
@@ -84,12 +84,14 @@ class SpikeMonitor(BrianObject):
         self.count = np.zeros(len(self.source), dtype=int)
 
     def pre_run(self, namespace):
-        self.codeobj = create_codeobject(self.name,
+        self.codeobj = create_codeobject(self.name+'_codeobject*',
                                          '', # No model-specific code
                                          {}, # no namespace
-                                         self.specifiers,
+                                         self.variables,
                                          template_name='spikemonitor',
-                                         indices={})
+                                         indices={},
+                                         variable_indices=defaultdict(lambda: '_idx'),
+                                         codeobj_class=self.codeobj_class)
 
     def update(self):
         self.codeobj()
@@ -140,33 +142,3 @@ class SpikeMonitor(BrianObject):
         description = '<{classname}, recording {source}>'
         return description.format(classname=self.__class__.__name__,
                                   source=self.source.name)
-
-    
-if __name__=='__main__':
-    from pylab import *
-    from brian2 import *
-    from brian2.codegen.languages import *
-    import time
-
-    N = 100
-    tau = 10*ms
-    eqs = '''
-    dV/dt = (2-V)/tau : 1
-    Vt : 1
-    '''
-    threshold = 'V>Vt'
-    reset = 'V = 0'
-    G = NeuronGroup(N, eqs, threshold=threshold, reset=reset)
-    G.Vt = arange(N)/(float(N))
-    G.V = rand(N)*G.Vt
-    M = SpikeMonitor(G)
-    run(100*ms)
-    print "Recorded", M.num_spikes, "spikes"
-    i, t = M.it
-    print t
-    print M.name
-    subplot(211)
-    plot(t, i, '.k')
-    subplot(212)
-    plot(M.count)
-    show()

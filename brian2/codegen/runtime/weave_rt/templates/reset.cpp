@@ -2,7 +2,7 @@
 //// MAIN CODE /////////////////////////////////////////////////////////////
 
 {% macro main() %}
-	// USE_SPECIFIERS { _spikes }
+	// USES_VARIABLES { _spikespace }
 
 	////// HANDLE DENORMALS ///
 	{% for line in denormals_code_lines %}
@@ -20,10 +20,11 @@
 	{% endfor %}
 
 	//// MAIN CODE ////////////
-	for(int _index__spikes=0; _index__spikes<_num_spikes; _index__spikes++)
+	const int _num_spikes = _spikespace[_num_spikespace-1];
+	for(int _index_spikes=0; _index_spikes<_num_spikes; _index_spikes++)
 	{
-		const int _neuron_idx = _spikes[_index__spikes];
-		const int _vectorisation_idx = _neuron_idx;
+		const int _idx = _spikespace[_index_spikes];
+		const int _vectorisation_idx = _idx;
 		{% for line in code_lines %}
 		{{line}}
 		{% endfor %}
