@@ -378,6 +378,71 @@ class Network(Nameable):
             print 'Took ', current-start, 's in total.'
         self.post_run()
 
+    @check_units(duration=second, report_period=second)
+    def generate_code(self, namespace=None, level=0):
+        '''
+        generate_code()
+
+        ...
+
+        '''
+
+        if namespace is not None:
+            self.pre_run(('explicit-run-namespace', namespace))
+        else:
+            namespace = get_local_namespace(2 + level)
+            self.pre_run(('implicit-run-namespace', namespace))
+
+        if len(self.objects)==0:
+            return # TODO: raise an error? warning?
+
+        clock, curclocks = self._nextclocks()
+
+        from brian2.groups.neurongroup import NeuronGroup
+        neurongroups = []
+        for obj in self.objects:
+            if obj.clock in curclocks and obj.active:
+                if isinstance(obj, NeuronGroup):
+                    neurongroups.append(obj)
+
+        import numpy as np
+        code = ''
+        arrays = []
+        for nrngrp in neurongroups:
+            ns = nrngrp.state_updater.codeobj.namespace
+            N = ns['_num_idx'] # TODO: consistency of varname???
+            for k, v in ns.items():
+                if isinstance(v, float):
+                    code += ('const double %s = %s;\n' % (k, repr(v)))
+                elif isinstance(v, int):
+                    code += ('const int %s = %s;\n' % (k, repr(v)))
+                elif isinstance (v, np.ndarray):
+                    if k.startswith('_array'):
+                        # TODO: dtype_spec should be the output of the
+                        # java_data_type function. But we need three (3)
+                        # data types for each array: The java dtype, the
+                        # c99 dtype and the rendescript allocation
+                        # dtype.
+
+                        dtype_spec = v.dtype
+                        arrays.append((k, dtype_spec, -1))
+                        pass
+
+            code += nrngrp.state_updater.codeobj.code
+
+            # array definitions
+            for varname, dtype_spec, N in arrays:
+                code = '%s %s = new %s[%s];\n' % (dtype_spec,
+                                                varname,
+                                                dtype_spec,
+                                                N)+code
+
+        print code
+        #import IPython
+        #IPython.embed()
+
+
+
     def stop(self):
         '''
         Stops the network from running, this is reset the next time `Network.run` is called.
