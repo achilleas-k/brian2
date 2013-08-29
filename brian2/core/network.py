@@ -387,6 +387,10 @@ class Network(Nameable):
 
         '''
 
+        # TODO: Imports in the header?
+        from brian2.groups.neurongroup import NeuronGroup
+        import numpy as np
+        from brian2.codegen.languages import java_lang
         if namespace is not None:
             self.pre_run(('explicit-run-namespace', namespace))
         else:
@@ -398,14 +402,12 @@ class Network(Nameable):
 
         clock, curclocks = self._nextclocks()
 
-        from brian2.groups.neurongroup import NeuronGroup
         neurongroups = []
         for obj in self.objects:
             if obj.clock in curclocks and obj.active:
                 if isinstance(obj, NeuronGroup):
                     neurongroups.append(obj)
 
-        import numpy as np
         code = ''
         arrays = []
         for nrngrp in neurongroups:
@@ -424,7 +426,7 @@ class Network(Nameable):
                         # c99 dtype and the rendescript allocation
                         # dtype.
 
-                        dtype_spec = v.dtype
+                        dtype_spec = java_lang.java_data_type(v.dtype)
                         arrays.append((k, dtype_spec, -1))
                         pass
 
