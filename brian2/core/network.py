@@ -412,8 +412,10 @@ class Network(Nameable):
         arrays = []
         for nrngrp in neurongroups:
             ns = nrngrp.state_updater.codeobj.namespace
-            N = ns['_num_idx'] # TODO: consistency of varname???
+            numneurons = ns['_num_idx']
             for k, v in ns.items():
+                # TODO: Would it be best to have two cases, one for
+                # array and the other for singular values?
                 if isinstance(v, float):
                     code += ('const double %s = %s;\n' % (k, repr(v)))
                 elif isinstance(v, int):
@@ -427,17 +429,36 @@ class Network(Nameable):
                         # dtype.
 
                         dtype_spec = java_lang.java_data_type(v.dtype)
-                        arrays.append((k, dtype_spec, -1))
+                        arrays.append((k, dtype_spec, numneurons))
                         pass
 
             code += nrngrp.state_updater.codeobj.code
 
-            # array definitions
+            # TODO: The following three loops can be combined in one
+            # where each statement in the loop prints to a separate file
+
+            # array definitions for Java
             for varname, dtype_spec, N in arrays:
-                code = '%s %s = new %s[%s];\n' % (dtype_spec,
+                javatype = dtype_spec['java']
+                code = '%s %s = new %s[%i];\n' % (javatype,
                                                 varname,
-                                                dtype_spec,
+                                                javatype,
                                                 N)+code
+            code = "\n// JAVA ARRAY DEFINITIONS\n"+code
+
+            # array definitions for Renderscript
+            for varname, dtype_spec, N in arrays:
+                rstype = dtype_spec['renderscript']
+                code = '%s *%s;\n' % (rstype, varname)+code
+            code = "\n// RENDERSCRIPT ARRAY DEFINITIONS\n"+code
+
+            # array definitions for Allocations
+            for varname, dtype_spec, N in arrays:
+                alloctype = dtype_spec['allocation']
+                code = ('Allocation %s = Allocation.createSized(mRS, '
+                        'Element.%s(mRS), %i);\n'
+                        % (varname, alloctype, N))+code
+            code = "\n// ALLOCATION (MEMORY BINDING) DEFINITIONS\n"+code
 
         print code
         #import IPython

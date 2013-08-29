@@ -33,21 +33,21 @@ def java_data_type(dtype):
     Each
     '''
     if dtype == numpy.int:
-        dtype = {'java': 'int', 'rs': 'int32_t', 'allocation': 'I32'}
+        dtype = {'java': 'int', 'renderscript': 'int32_t', 'allocation': 'I32'}
     if dtype == numpy.float32:
-        dtype = {'java': 'float', 'rs': 'float', 'allocation': 'F32'}
+        dtype = {'java': 'float', 'renderscript': 'float', 'allocation': 'F32'}
     elif dtype == numpy.float64:
-        dtype = {'java': 'double', 'rs':'double', 'allocation': 'F64'}
+        dtype = {'java': 'double', 'renderscript':'double', 'allocation': 'F64'}
     elif dtype == numpy.int32:
-        dtype = {'java': 'int', 'rs': 'int32_t', 'allocation': 'I32'}
+        dtype = {'java': 'int', 'renderscript': 'int32_t', 'allocation': 'I32'}
     elif dtype == numpy.int64:
-        dtype = {'java': 'long', 'rs': 'int64_t', 'allocation': 'I64'}
+        dtype = {'java': 'long', 'renderscript': 'int64_t', 'allocation': 'I64'}
     elif dtype == numpy.uint16:
-        dtype = {'java': 'short', 'rs': 'int16_t', 'allocation': 'I16'}
+        dtype = {'java': 'short', 'renderscript': 'int16_t', 'allocation': 'I16'}
     elif dtype == numpy.uint32:
-        dtype = {'java': 'long', 'rs': 'int64_t', 'allocation': 'I64'}
+        dtype = {'java': 'long', 'renderscript': 'int64_t', 'allocation': 'I64'}
     elif dtype == numpy.bool_ or dtype is bool:
-        dtype = {'java': 'boolean', 'rs': 'bool', 'allocation': 'BOOLEAN'}
+        dtype = {'java': 'boolean', 'renderscript': 'bool', 'allocation': 'BOOLEAN'}
     else:
         raise ValueError("dtype " + str(dtype) + " not known.")
     return dtype
