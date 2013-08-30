@@ -31,8 +31,8 @@ brian_prefs.register_preferences(
 
 class JavaCodeObject(CodeObject):
     '''
-    Weave code object
-    
+    Java code object
+
     The ``code`` should be a `~brian2.codegen.languages.templates.MultiTemplate`
     object with two macros defined, ``main`` (for the main loop code) and
     ``support_code`` for any support code (e.g. function definitions).

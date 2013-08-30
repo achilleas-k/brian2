@@ -49,7 +49,7 @@ def create_codeobject(name, abstract_code, namespace, variables, template_name,
                       template_kwds=None):
     '''
     The following arguments keywords are passed to the template:
-    
+
     * code_lines coming from translation applied to abstract_code, a list
       of lines of code, given to the template as ``code_lines`` keyword.
     * ``template_kwds`` dict
@@ -65,7 +65,7 @@ def create_codeobject(name, abstract_code, namespace, variables, template_name,
 
     if codeobj_class is None:
         codeobj_class = get_default_codeobject_class()
-        
+
     template = get_codeobject_template(template_name,
                                        codeobj_class=codeobj_class)
 
@@ -80,9 +80,9 @@ def create_codeobject(name, abstract_code, namespace, variables, template_name,
                                 iterate_all=iterate_all)
     template_kwds.update(kwds)
     logger.debug(name + " inner code:\n" + str(innercode))
-    
+
     name = find_name(name)
-    
+
     code = template(innercode, **template_kwds)
     logger.debug(name + " code:\n" + str(code))
 
@@ -104,36 +104,38 @@ def get_codeobject_template(name, codeobj_class=None):
 class CodeObject(Nameable):
     '''
     Executable code object.
-    
+
     The ``code`` can either be a string or a
     `brian2.codegen.templates.MultiTemplate`.
-    
+
     After initialisation, the code is compiled with the given namespace
     using ``code.compile(namespace)``.
-    
+
     Calling ``code(key1=val1, key2=val2)`` executes the code with the given
     variables inserted into the namespace.
     '''
-    
+
     #: The `Language` used by this `CodeObject`
     language = None
-    
+
     def __init__(self, code, namespace, variables, name='codeobject*'):
         Nameable.__init__(self, name=name)
         self.code = code
         self.compile_methods = self.get_compile_methods(variables)
         self.namespace = namespace
         self.variables = variables
-        
+
         # Variables can refer to values that are either constant (e.g. dt)
         # or change every timestep (e.g. t). We add the values of the
         # constant variables here and add the names of non-constant variables
         # to a list
-        
+
         # A list containing tuples of name and a function giving the value
         self.nonconstant_values = []
-        
+
+        print self.name
         for name, var in self.variables.iteritems():
+            print "n: %s, v: %s" % (name, var)
             if isinstance(var, Variable) and not isinstance(var, Subexpression):
                 if not var.constant:
                     self.nonconstant_values.append((name, var.get_value))
@@ -176,7 +178,7 @@ class CodeObject(Nameable):
     def run(self):
         '''
         Runs the code in the namespace.
-        
+
         Returns
         -------
         return_value : dict

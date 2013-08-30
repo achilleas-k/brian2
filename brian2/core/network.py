@@ -387,10 +387,10 @@ class Network(Nameable):
 
         '''
 
-        # TODO: Imports in the header?
+        # TODO: Imports in the header
         from brian2.groups.neurongroup import NeuronGroup
-        import numpy as np
         from brian2.codegen.languages import java_lang
+        from brian2.core.variables import ArrayVariable
         if namespace is not None:
             self.pre_run(('explicit-run-namespace', namespace))
         else:
@@ -409,62 +409,73 @@ class Network(Nameable):
                     neurongroups.append(obj)
 
         code = ''
-        arrays = []
         for nrngrp in neurongroups:
+            variables = nrngrp.variables
+            arrays = []
+
             ns = nrngrp.state_updater.codeobj.namespace
             numneurons = ns['_num_idx']
+            code += '\n// CONSTANT DECLARATIONS\n'
             for k, v in ns.items():
-                # TODO: Would it be best to have two cases, one for
-                # array and the other for singular values?
                 if isinstance(v, float):
                     code += ('const double %s = %s;\n' % (k, repr(v)))
                 elif isinstance(v, int):
                     code += ('const int %s = %s;\n' % (k, repr(v)))
-                elif isinstance (v, np.ndarray):
-                    if k.startswith('_array'):
-                        # TODO: dtype_spec should be the output of the
-                        # java_data_type function. But we need three (3)
-                        # data types for each array: The java dtype, the
-                        # c99 dtype and the rendescript allocation
-                        # dtype.
+                elif isinstance (v, ArrayVariable):
+                    dtype_spec = java_lang.java_data_type(v.dtype)
+                    arrays.append(k, dtype_spec, numneurons)
 
-                        dtype_spec = java_lang.java_data_type(v.dtype)
-                        arrays.append((k, dtype_spec, numneurons))
-                        pass
-
-            code += nrngrp.state_updater.codeobj.code
-
-            # TODO: The following three loops can be combined in one
-            # where each statement in the loop prints to a separate file
+            # TODO: The following fout loops can be combined in one
+            # where each statement in the loop prints to the appropriate file
 
             # array definitions for Java
+            code += '\n// JAVA ARRAY DEFINITIONS\n'
             for varname, dtype_spec, N in arrays:
                 javatype = dtype_spec['java']
-                code = '%s %s = new %s[%i];\n' % (javatype,
+                code += '%s %s = new %s[%i];\n' % (javatype,
                                                 varname,
                                                 javatype,
-                                                N)+code
-            code = "\n// JAVA ARRAY DEFINITIONS\n"+code
+                                                N)
 
             # array definitions for Renderscript
+            code += '\n// RENDERSCRIPT ARRAY DEFINITIONS\n'
             for varname, dtype_spec, N in arrays:
                 rstype = dtype_spec['renderscript']
-                code = '%s *%s;\n' % (rstype, varname)+code
-            code = "\n// RENDERSCRIPT ARRAY DEFINITIONS\n"+code
+                code += '%s *%s;\n' % (rstype, varname)
 
             # array definitions for Allocations
+            code += '\n// ALLOCATION DEFINITIONS\n'
             for varname, dtype_spec, N in arrays:
                 alloctype = dtype_spec['allocation']
-                code = ('Allocation %s = Allocation.createSized(mRS, '
+                code += ('Allocation %s = Allocation.createSized(mRS, '
                         'Element.%s(mRS), %i);\n'
-                        % (varname, alloctype, N))+code
-            code = "\n// ALLOCATION (MEMORY BINDING) DEFINITIONS\n"+code
+                        % (varname, alloctype, N))
 
-        print code
+            # Allocations for input and output of renderscript kernel(s)
+            #code += ('in_%s_rs = Allocation.createSized('
+            #        'mRS, Element.I32(mRS), %s);\n' % (nrngrp.name, numneurons))
+            #code += ('out_%s_rs = Allocation.createSized('
+            #        'mRS, Element.I32(mRS), %s);\n' % (nrngrp.name, numneurons))
+
+            # binding Java arrays to Renderscript via Allocations
+            code += '\n// MEMORY BINDING\n'
+            for varname, dtype_spec, N in arrays:
+                code += 'mScript.bind%s(%s_rs);\n' % (varname, varname)
+            # Allocations for input and output
+            code += '\n// STATE UPDATERS FOR %s\n' % (nrngrp.name)
+            code += nrngrp.state_updater.codeobj.code+'\n'
+
+
+        #print code
         #import IPython
         #IPython.embed()
 
 
+    def _writetemplates(code):
+        '''
+        Write the code built using `generate_code` to the appropriate templates.
+        '''
+        pass
 
     def stop(self):
         '''
@@ -474,5 +485,4 @@ class Network(Nameable):
 
     def __repr__(self):
         return '<%s at time t=%s, containing objects: %s>' % (self.__class__.__name__,
-                                                              str(self.t),
                                                               ', '.join((obj.__repr__() for obj in self.objects)))
