@@ -9,6 +9,7 @@ from brian2.core.names import Nameable, find_name
 from brian2.utils.logger import get_logger
 from .translation import translate
 from .runtime.targets import runtime_targets
+from brian2.codegen.languages import java_lang
 
 __all__ = ['CodeObject',
            'create_codeobject',
@@ -121,21 +122,27 @@ class CodeObject(Nameable):
     def __init__(self, code, namespace, variables, name='codeobject*'):
         Nameable.__init__(self, name=name)
         self.code = code
-        self.compile_methods = self.get_compile_methods(variables)
-        self.namespace = namespace
-        self.variables = variables
 
-        # Variables can refer to values that are either constant (e.g. dt)
-        # or change every timestep (e.g. t). We add the values of the
-        # constant variables here and add the names of non-constant variables
-        # to a list
+        constants = []
+        arrays = []
+        for k, v in namespace.items():
+            if isinstance(v, float):
+                dtype = "float" # TODO: Use the language submodule to translate?
+                constants.append((dtype, k, repr(v)))
+            elif isinstance(v, int):
+                dtype = "int"
+                constants.append((dtype, k, repr(v)))
 
-        # A list containing tuples of name and a function giving the value
-        self.nonconstant_values = []
+        for var in variables:
+            elif isinstance (v, ArrayVariable):
+                dtype_spec = java_lang.java_data_type(v.dtype)
+                arrays.append(k, dtype_spec, len(v.value))
 
         print self.name
+        import IPython
+        IPython.embed()
+        '''
         for name, var in self.variables.iteritems():
-            print "n: %s, v: %s" % (name, var)
             if isinstance(var, Variable) and not isinstance(var, Subexpression):
                 if not var.constant:
                     self.nonconstant_values.append((name, var.get_value))
@@ -152,6 +159,7 @@ class CodeObject(Nameable):
                     # '_num'+name with its length
                     if not var.scalar:
                         self.namespace['_num' + name] = var.get_len()
+        '''
 
     def get_compile_methods(self, variables):
         meths = []
