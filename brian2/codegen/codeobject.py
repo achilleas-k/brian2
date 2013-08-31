@@ -127,16 +127,18 @@ class CodeObject(Nameable):
         arrays = []
         for k, v in namespace.items():
             if isinstance(v, float):
-                dtype = "float" # TODO: Use the language submodule to translate?
-                constants.append((dtype, k, repr(v)))
+                # TODO: Use the language submodule to translate
+                dtype = "float"
+                constants.append((dtype, k, repr(v)+'f'))
             elif isinstance(v, int):
                 dtype = "int"
                 constants.append((dtype, k, repr(v)))
 
-        for var in variables:
-            elif isinstance (v, ArrayVariable):
+        for k, v in variables.items():
+            if isinstance (v, ArrayVariable):
                 dtype_spec = java_lang.java_data_type(v.dtype)
-                arrays.append(k, dtype_spec, len(v.value))
+                # TODO: Perhaps it would be more convenient as a dictionary?
+                arrays.append((k, dtype_spec, len(v.value)))
 
         print self.name
         import IPython
