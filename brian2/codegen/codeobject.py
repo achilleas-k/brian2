@@ -125,6 +125,7 @@ class CodeObject(Nameable):
 
         constants = []
         arrays = []
+        functions = []
         for k, v in namespace.items():
             if isinstance(v, float):
                 # TODO: Use the language submodule to translate
@@ -133,6 +134,8 @@ class CodeObject(Nameable):
             elif isinstance(v, int):
                 dtype = "int"
                 constants.append((dtype, k, repr(v)))
+            elif hasattr(v, '__call__'):
+                functions.append((k, v))
 
         for k, v in variables.items():
             if isinstance (v, ArrayVariable):
