@@ -122,8 +122,6 @@ class CodeObject(Nameable):
     def __init__(self, code, namespace, variables, name='codeobject*'):
         Nameable.__init__(self, name=name)
         self.code = code
-        import IPython
-        IPython.embed()
         constants = []
         arrays = []
         functions = []
@@ -142,7 +140,7 @@ class CodeObject(Nameable):
             if isinstance (v, ArrayVariable):
                 dtype_spec = java_lang.java_data_type(v.dtype)
                 # TODO: Perhaps it would be more convenient as a dictionary?
-                arrays.append((k, dtype_spec, len(v.value)))
+                arrays.append((v.arrayname, dtype_spec, len(v.value)))
         # NOTE: self.namespace structure is inconsistent with the general way
         # namespaces are defined. Is this an issue?
         self.namespace = {
@@ -187,8 +185,6 @@ class CodeObject(Nameable):
     def __call__(self):
         # generate code
         # TODO: Tidy up this code
-        import IPython
-        IPython.embed()
         code = {}
         constants = self.namespace['constants']
         arrays = self.namespace['arrays']
@@ -196,7 +192,7 @@ class CodeObject(Nameable):
         if len(constants) > 0:
             code['constants'] = '// CONSTANT DECLARATIONS\n'
             for dtype, k, v in constants:
-                code['constants'] += 'const %s %s = %s;\n' % (dtype, k, repr(v))
+                code['constants'] += 'const %s %s = %s;\n' % (dtype, k, v)
 
 
         # array definitions for Java
@@ -208,6 +204,7 @@ class CodeObject(Nameable):
             code['allocation_init'] = '// ALLOCATION INITIALISATIONS\n'
             code['memory_bindings'] = '// MEMORY BINDINGS\n'
             for varname, dtype_spec, N in arrays:
+                varname_alloc = varname+"_alloc"
                 javatype = dtype_spec['java']
                 rstype = dtype_spec['renderscript']
                 alloctype = dtype_spec['allocation']
