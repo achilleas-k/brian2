@@ -122,6 +122,8 @@ class CodeObject(Nameable):
     def __init__(self, code, namespace, variables, name='codeobject*'):
         Nameable.__init__(self, name=name)
         self.code = code
+        import IPython
+        IPython.embed()
         constants = []
         arrays = []
         functions = []
@@ -184,58 +186,49 @@ class CodeObject(Nameable):
 
     def __call__(self):
         # generate code
-        print self.name+" is being called"
-        code = ''
+        # TODO: Tidy up this code
+        import IPython
+        IPython.embed()
+        code = {}
         constants = self.namespace['constants']
         arrays = self.namespace['arrays']
         functions = self.namespace['functions']
-        code += '\n// CONSTANT DECLARATIONS\n'
-        for dtype, k, v in constants:
-            if isinstance(v, float):
-                code += ('const double %s = %s;\n' % (k, repr(v)))
-            elif isinstance(v, int):
-                code += ('const int %s = %s;\n' % (k, repr(v)))
+        if len(constants) > 0:
+            code['constants'] = '// CONSTANT DECLARATIONS\n'
+            for dtype, k, v in constants:
+                code['constants'] += 'const %s %s = %s;\n' % (dtype, k, repr(v))
 
-
-        # TODO: The following fout loops can be combined in one
-        # where each statement in the loop prints to the appropriate file
 
         # array definitions for Java
-        code += '\n// JAVA ARRAY DEFINITIONS\n'
-        for varname, dtype_spec, N in arrays:
-            javatype = dtype_spec['java']
-            code += '%s %s = new %s[%i];\n' % (javatype,
-                                            varname,
-                                            javatype,
-                                            N)
-
-        # array definitions for Renderscript
-        code += '\n// RENDERSCRIPT ARRAY DEFINITIONS\n'
-        for varname, dtype_spec, N in arrays:
-            rstype = dtype_spec['renderscript']
-            code += '%s *%s;\n' % (rstype, varname)
-
-        # array definitions for Allocations
-        code += '\n// ALLOCATION DEFINITIONS\n'
-        for varname, dtype_spec, N in arrays:
-            alloctype = dtype_spec['allocation']
-            code += ('Allocation %s = Allocation.createSized(mRS, '
-                    'Element.%s(mRS), %i);\n'
-                    % (varname, alloctype, N))
+        if len(arrays) > 0:
+            code['java_array_decl'] = '// JAVA ARRAY DEFINITIONS\n'
+            code['java_array_init'] = '// JAVA ARRAY INITIALISATIONS\n'
+            code['renderscript_array_decl'] = '// RENDERSCRIPT ARRAY DEFINITIONS\n'
+            code['allocation_decl'] = '// ALLOCATION DEFINITIONS\n'
+            code['allocation_init'] = '// ALLOCATION INITIALISATIONS\n'
+            code['memory_bindings'] = '// MEMORY BINDINGS\n'
+            for varname, dtype_spec, N in arrays:
+                javatype = dtype_spec['java']
+                rstype = dtype_spec['renderscript']
+                alloctype = dtype_spec['allocation']
+                code['java_array_decl'] += '%s[] %s;\n' % (javatype, varname)
+                code['java_array_init'] += '%s = new %s[%s];\n' % (varname,
+                                                                    javatype, N)
+                code['renderscript_array_decl'] += '%s *%s;\n' % (rstype, varname)
+                code['allocation_decl'] += 'Allocation %s;\n' % (varname_alloc)
+                code['allocation_init'] +=\
+                        '%s = Allocation.createSized(mRS, Element.%s(mRS), %s);\n' % (varname_alloc, alloctype, N)
+                code['memory_bindings'] += 'mScript.bind%s(%s);\n' % (varname, varname_alloc)
 
         # Allocations for input and output of renderscript kernel(s)
-        #code += ('in_%s_rs = Allocation.createSized('
+        #code += ('in_%s = Allocation.createSized('
         #        'mRS, Element.I32(mRS), %s);\n' % (nrngrp.name, numneurons))
-        #code += ('out_%s_rs = Allocation.createSized('
+        #code += ('out_%s = Allocation.createSized('
         #        'mRS, Element.I32(mRS), %s);\n' % (nrngrp.name, numneurons))
 
-        # binding Java arrays to Renderscript via Allocations
-        code += '\n// MEMORY BINDING\n'
-        for varname, dtype_spec, N in arrays:
-            code += 'mScript.bind%s(%s_rs);\n' % (varname, varname)
-        # Allocations for input and output
-        code += '\n// STATE UPDATERS FOR %s\n' % (self.name)
-        code += self.code+'\n'
+        if len(code) > 0:
+            code['state_updaters'] = '// STATE UPDATERS FOR %s\n' % (self.name)
+            code['state_updaters'] += self.code+'\n'
         return code
 
 

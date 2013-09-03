@@ -399,9 +399,62 @@ class Network(Nameable):
 
         clock, curclocks = self._nextclocks()
 
+        import os
+        # open templates
+        template_path = "/home/achilleas/code/brian2/android_template/"
+        java_base_fn = "CodegenTemplate.java"
+        rs_base_fn =  "stateupdate.rs"
+        java_template_fn = os.path.join(template_path, java_base_fn)
+        rs_template_fn = os.path.join(template_path, rs_base_fn)
+
+        java_template_file = open(java_template_fn, 'r')
+        rs_template_file = open(rs_template_fn, 'r')
+        java_code = java_template_file.read()
+        rs_code = rs_template_file.read()
+        java_template_file.close()
+        rs_template_file.close()
+
         for obj in self.objects:
             for cont_obj in obj.contained_objects:
-                print cont_obj.codeobj()
+                code_dict = cont_obj.codeobj()
+                # FILL IN JAVA TEMPLATE
+                if code_dict.has_key('java_array_decl'):
+                    java_code = java_code.replace('%JAVA ARRAY DECLARATIONS%',
+                            code_dict['java_array_decl'])
+                if code_dict.has_key('java_array_init'):
+                    java_code = java_code.replace('%JAVA ARRAY INITIALISATIONS%',
+                            code_dict['java_array_init'])
+                if code_dict.has_key('allocation_decl'):
+                    java_code = java_code.replace('%ALLOCATION DECLARATIONS%',
+                            code_dict['allocation_decl'])
+                if code_dict.has_key('allocation_init'):
+                    java_code = java_code.replace('%ALLOCATION INITIALISATIONS%',
+                            code_dict['allocation_init'])
+                if code_dict.has_key('memory_bindings'):
+                    java_code = java_code.replace('%MEMORY BINDINGS%',
+                        code_dict['memory_bindings'])
+
+                # FILL IN RENDERSCRIPT TEMPLATE
+                if code_dict.has_key('renderscript_array_decl'):
+                    rs_code = rs_code.replace('%RENDERSCRIPT ARRAYS%',
+                            code_dict['renderscript_array_decl'])
+                if code_dict.has_key('constants'):
+                    rs_code = rs_code.replace('%RENDERSCRIPT CONSTANTS%',
+                            code_dict['constants'])
+                if code_dict.has_key('state_updaters'):
+                    rs_code = rs_code.replace('%STATE UPDATERS%',
+                            code_dict['state_updaters'])
+
+        if not os.path.exists("./output"):
+            os.makedirs("./output")
+        java_output_file = open(os.path.join("./output/", java_base_fn), 'w')
+        rs_output_file = open(os.path.join("./output/", rs_base_fn), 'w')
+        java_output_file.write(java_code)
+        rs_output_file.write(rs_code)
+        java_output_file.close()
+        rs_output_file.close()
+
+
 
 
     def _writetemplates(code):
