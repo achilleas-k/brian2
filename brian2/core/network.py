@@ -401,7 +401,8 @@ class Network(Nameable):
 
         import os
         # open templates
-        template_path = "/home/achilleas/code/brian2/android_template/"
+        # NOTE: temporary template path
+        template_path = os.path.join(os.path.split(os.path.split(os.path.abspath(os.path.dirname(__file__)))[0])[0], 'android_template')
         java_base_fn = "CodegenTemplate.java"
         rs_base_fn =  "stateupdate.rs"
         java_template_fn = os.path.join(template_path, java_base_fn)
