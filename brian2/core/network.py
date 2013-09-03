@@ -379,7 +379,8 @@ class Network(Nameable):
         self.post_run()
 
     @check_units(duration=second, report_period=second)
-    def generate_code(self, namespace=None, level=0):
+    def generate_code(self, report=None, report_period=60*second,
+            namespace=None, level=0):
         '''
         generate_code()
 
@@ -387,10 +388,6 @@ class Network(Nameable):
 
         '''
 
-        # TODO: Imports in the header
-        from brian2.groups.neurongroup import NeuronGroup
-        from brian2.codegen.languages import java_lang
-        from brian2.core.variables import ArrayVariable
         if namespace is not None:
             self.pre_run(('explicit-run-namespace', namespace))
         else:
@@ -402,73 +399,9 @@ class Network(Nameable):
 
         clock, curclocks = self._nextclocks()
 
-        neurongroups = []
         for obj in self.objects:
-            if obj.clock in curclocks and obj.active:
-                if isinstance(obj, NeuronGroup):
-                    neurongroups.append(obj)
-
-        code = ''
-        for nrngrp in neurongroups:
-            variables = nrngrp.variables
-            arrays = []
-
-            ns = nrngrp.state_updater.codeobj.namespace
-            numneurons = ns['_num_idx']
-            code += '\n// CONSTANT DECLARATIONS\n'
-            for k, v in ns.items():
-                if isinstance(v, float):
-                    code += ('const double %s = %s;\n' % (k, repr(v)))
-                elif isinstance(v, int):
-                    code += ('const int %s = %s;\n' % (k, repr(v)))
-                elif isinstance (v, ArrayVariable):
-                    dtype_spec = java_lang.java_data_type(v.dtype)
-                    arrays.append(k, dtype_spec, numneurons)
-
-            # TODO: The following fout loops can be combined in one
-            # where each statement in the loop prints to the appropriate file
-
-            # array definitions for Java
-            code += '\n// JAVA ARRAY DEFINITIONS\n'
-            for varname, dtype_spec, N in arrays:
-                javatype = dtype_spec['java']
-                code += '%s %s = new %s[%i];\n' % (javatype,
-                                                varname,
-                                                javatype,
-                                                N)
-
-            # array definitions for Renderscript
-            code += '\n// RENDERSCRIPT ARRAY DEFINITIONS\n'
-            for varname, dtype_spec, N in arrays:
-                rstype = dtype_spec['renderscript']
-                code += '%s *%s;\n' % (rstype, varname)
-
-            # array definitions for Allocations
-            code += '\n// ALLOCATION DEFINITIONS\n'
-            for varname, dtype_spec, N in arrays:
-                alloctype = dtype_spec['allocation']
-                code += ('Allocation %s = Allocation.createSized(mRS, '
-                        'Element.%s(mRS), %i);\n'
-                        % (varname, alloctype, N))
-
-            # Allocations for input and output of renderscript kernel(s)
-            #code += ('in_%s_rs = Allocation.createSized('
-            #        'mRS, Element.I32(mRS), %s);\n' % (nrngrp.name, numneurons))
-            #code += ('out_%s_rs = Allocation.createSized('
-            #        'mRS, Element.I32(mRS), %s);\n' % (nrngrp.name, numneurons))
-
-            # binding Java arrays to Renderscript via Allocations
-            code += '\n// MEMORY BINDING\n'
-            for varname, dtype_spec, N in arrays:
-                code += 'mScript.bind%s(%s_rs);\n' % (varname, varname)
-            # Allocations for input and output
-            code += '\n// STATE UPDATERS FOR %s\n' % (nrngrp.name)
-            code += nrngrp.state_updater.codeobj.code+'\n'
-
-
-        #print code
-        #import IPython
-        #IPython.embed()
+            for cont_obj in obj.contained_objects:
+                print cont_obj.codeobj()
 
 
     def _writetemplates(code):

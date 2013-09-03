@@ -89,7 +89,7 @@ def create_codeobject(name, abstract_code, namespace, variables, template_name,
 
     variables.update(indices)
     codeobj = codeobj_class(code, namespace, variables, name=name)
-    codeobj.compile()
+    #codeobj.compile()
     return codeobj
 
 
@@ -122,7 +122,6 @@ class CodeObject(Nameable):
     def __init__(self, code, namespace, variables, name='codeobject*'):
         Nameable.__init__(self, name=name)
         self.code = code
-
         constants = []
         arrays = []
         functions = []
@@ -142,10 +141,14 @@ class CodeObject(Nameable):
                 dtype_spec = java_lang.java_data_type(v.dtype)
                 # TODO: Perhaps it would be more convenient as a dictionary?
                 arrays.append((k, dtype_spec, len(v.value)))
+        # NOTE: self.namespace structure is inconsistent with the general way
+        # namespaces are defined. Is this an issue?
+        self.namespace = {
+                'arrays' : arrays,
+                'constants' : constants,
+                'functions' : functions
+                }
 
-        print self.name
-        import IPython
-        IPython.embed()
         '''
         for name, var in self.variables.iteritems():
             if isinstance(var, Variable) and not isinstance(var, Subexpression):
@@ -179,24 +182,60 @@ class CodeObject(Nameable):
         for meth in self.compile_methods:
             meth(self.namespace)
 
-    def __call__(self, **kwds):
-        # update the values of the non-constant values in the namespace
-        for name, func in self.nonconstant_values:
-            self.namespace[name] = func()
+    def __call__(self):
+        # generate code
+        print self.name+" is being called"
+        code = ''
+        constants = self.namespace['constants']
+        arrays = self.namespace['arrays']
+        functions = self.namespace['functions']
+        code += '\n// CONSTANT DECLARATIONS\n'
+        for dtype, k, v in constants:
+            if isinstance(v, float):
+                code += ('const double %s = %s;\n' % (k, repr(v)))
+            elif isinstance(v, int):
+                code += ('const int %s = %s;\n' % (k, repr(v)))
 
-        self.namespace.update(**kwds)
 
-        return self.run()
+        # TODO: The following fout loops can be combined in one
+        # where each statement in the loop prints to the appropriate file
 
-    def run(self):
-        '''
-        Runs the code in the namespace.
+        # array definitions for Java
+        code += '\n// JAVA ARRAY DEFINITIONS\n'
+        for varname, dtype_spec, N in arrays:
+            javatype = dtype_spec['java']
+            code += '%s %s = new %s[%i];\n' % (javatype,
+                                            varname,
+                                            javatype,
+                                            N)
 
-        Returns
-        -------
-        return_value : dict
-            A dictionary with the keys corresponding to the `output_variables`
-            defined during the call of `Language.code_object`.
-        '''
-        raise NotImplementedError()
+        # array definitions for Renderscript
+        code += '\n// RENDERSCRIPT ARRAY DEFINITIONS\n'
+        for varname, dtype_spec, N in arrays:
+            rstype = dtype_spec['renderscript']
+            code += '%s *%s;\n' % (rstype, varname)
+
+        # array definitions for Allocations
+        code += '\n// ALLOCATION DEFINITIONS\n'
+        for varname, dtype_spec, N in arrays:
+            alloctype = dtype_spec['allocation']
+            code += ('Allocation %s = Allocation.createSized(mRS, '
+                    'Element.%s(mRS), %i);\n'
+                    % (varname, alloctype, N))
+
+        # Allocations for input and output of renderscript kernel(s)
+        #code += ('in_%s_rs = Allocation.createSized('
+        #        'mRS, Element.I32(mRS), %s);\n' % (nrngrp.name, numneurons))
+        #code += ('out_%s_rs = Allocation.createSized('
+        #        'mRS, Element.I32(mRS), %s);\n' % (nrngrp.name, numneurons))
+
+        # binding Java arrays to Renderscript via Allocations
+        code += '\n// MEMORY BINDING\n'
+        for varname, dtype_spec, N in arrays:
+            code += 'mScript.bind%s(%s_rs);\n' % (varname, varname)
+        # Allocations for input and output
+        code += '\n// STATE UPDATERS FOR %s\n' % (self.name)
+        code += self.code+'\n'
+        return code
+
 
