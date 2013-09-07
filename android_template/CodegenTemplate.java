@@ -81,7 +81,6 @@ public class CodegenTemplate { //extends AsyncTask<Void, String, Void> {
 
     Allocation idx_allocation;
     Allocation out;
-
     public void setup() {
         /*
          * duration and dt.
@@ -91,7 +90,6 @@ public class CodegenTemplate { //extends AsyncTask<Void, String, Void> {
         mRS = RenderScript.create(bdContext);
         mScript = new ScriptC_stateupdate(mRS);
         // SIMULATION PARAMS (N and dt)
-        mScript.set_numNeurons(100);
         mScript.set_dt(dt);
 
         /*
@@ -117,13 +115,15 @@ public class CodegenTemplate { //extends AsyncTask<Void, String, Void> {
     //*********** MAIN LOOP *************
     public void run() {
         Log.d(LOGID, "Starting run code ...");
+        idx_allocation = Allocation.createSized(mRS, Element.I32(mRS), %N%);
+        out = Allocation.createSized(mRS, Element.I32(mRS), %N%);
         int nsteps = (int)(_duration/dt);
-        int[] idx_arr = new int[100];
-        for (int idx=0; idx<100; idx++) {
+        int[] idx_arr = new int[%N%];
+        for (int idx=0; idx<%N%; idx++) {
             idx_arr[idx] = idx;
         }
         idx_allocation.copyFrom(idx_arr);
-        float[] zeros = new float[100];
+        float[] zeros = new float[%N%];
         Arrays.fill(zeros, 0f);
         /*
          * For each state variable:
@@ -136,6 +136,7 @@ public class CodegenTemplate { //extends AsyncTask<Void, String, Void> {
          */
 
         for (t=0; t<_duration; t+=dt) {
+            mScript.set_t(t);
             mScript.forEach_update(idx_allocation, out);
             mRS.finish();
         }
