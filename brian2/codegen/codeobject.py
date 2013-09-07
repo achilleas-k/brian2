@@ -29,7 +29,7 @@ def get_default_codeobject_class():
             codeobj_class = runtime_targets[codeobj_class]
         except KeyError:
             raise ValueError("Unknown code generation target: %s, should be "
-                             " one of %s"%(codeobj_class, runtime_targets.keys()))
+                             " one of %s" % (codeobj_class, runtime_targets.keys()))
     return codeobj_class
 
 
@@ -88,7 +88,7 @@ def create_codeobject(name, abstract_code, namespace, variables, template_name,
     logger.debug(name + " code:\n" + str(code))
 
     variables.update(indices)
-    codeobj = codeobj_class(code, namespace, variables, name=name)
+    codeobj = codeobj_class(code, namespace, variables)#, name=name)
     #codeobj.compile()
     return codeobj
 
@@ -215,7 +215,7 @@ class CodeObject(Nameable):
                 code['allocation_decl'] += 'Allocation %s;\n' % (varname_alloc)
                 code['allocation_init'] +=\
                         '%s = Allocation.createSized(mRS, Element.%s(mRS), %s);\n' % (varname_alloc, alloctype, N)
-                code['memory_bindings'] += 'mScript.bind%s(%s);\n' % (varname, varname_alloc)
+                code['memory_bindings'] += 'mScript.bind_%s(%s);\n' % (varname, varname_alloc)
 
         # Allocations for input and output of renderscript kernel(s)
         #code += ('in_%s = Allocation.createSized('
@@ -225,7 +225,7 @@ class CodeObject(Nameable):
 
         if len(code) > 0:
             code['state_updaters'] = '// STATE UPDATERS FOR %s\n' % (self.name)
-            code['state_updaters'] += self.code+'\n'
+            code['state_updaters'] += self.code.main+'\n'
         return code
 
 

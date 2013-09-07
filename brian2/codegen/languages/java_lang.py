@@ -1,8 +1,6 @@
 '''
 TODO: use preferences to get arguments to Language
 '''
-import itertools
-import os
 
 import numpy
 
@@ -14,6 +12,7 @@ from .base import Language
 from brian2.parsing.rendering import JavaNodeRenderer
 
 from brian2.core.preferences import brian_prefs, BrianPreference
+from brian2.core.variables import ArrayVariable
 
 logger = get_logger(__name__)
 
@@ -37,7 +36,9 @@ def java_data_type(dtype):
     if dtype == numpy.float32:
         dtype = {'java': 'float', 'renderscript': 'float', 'allocation': 'F32'}
     elif dtype == numpy.float64:
-        dtype = {'java': 'double', 'renderscript':'double', 'allocation': 'F64'}
+        # NOTE: Using float instead of double
+        dtype = {'java': 'float', 'renderscript': 'float', 'allocation': 'F32'}
+        #dtype = {'java': 'double', 'renderscript':'double', 'allocation': 'F64'}
     elif dtype == numpy.int32:
         dtype = {'java': 'int', 'renderscript': 'int32_t', 'allocation': 'I32'}
     elif dtype == numpy.int64:
@@ -82,9 +83,8 @@ class JavaLanguage(Language):
 
     language_id = 'java'
 
-    def __init__(self):
-        # set default prefs???
-        pass
+    def __init__(self, java_data_type=java_data_type):
+        self.java_data_type = java_data_type
 
     def translate_expression(self, expr):
         return JavaNodeRenderer().render_expr(expr).strip()
@@ -92,65 +92,83 @@ class JavaLanguage(Language):
     def translate_statement(self, statement):
         var, op, expr = statement.var, statement.op, statement.expr
         if op == ':=':
-            decl = java_data_type(statement.dtype) + ' '
+            decl = java_data_type(statement.dtype)['java'] + ' '
             op = '='
             if statement.constant:
-                decl = 'final ' + decl
+                decl = 'const ' + decl
         else:
             decl = ''
         return decl + var + ' ' + op + ' ' +\
                 self.translate_expression(expr) + ';'
 
-    def translate_statement_sequence(self, statements, specifiers,
-                                                     namespace, indices):
-        read, write = self.array_read_write(statements, specifiers)
+    def translate_statement_sequence(self, statements, variables, namespace,
+                                        variable_indices, itertel_all):
+        read, write = self.array_read_write(statements, variables)
         lines = []
         # read arrays
-        for var in read:
-            index_var = specifiers[var].index
-            index_spec = indices[index_var]
-            spec = specifiers[var]
-            if var not in write:
-                line = 'final '
+        for varname in read:
+            index_var = variable_indices[varname]
+            var = variables[varname]
+            if varname not in write:
+                line = 'const '
             else:
                 line = ''
-            line = line + java_data_type(spec.dtype) + ' ' + var + ' = '
-            line = line + spec.arrayname + '[' + index_var + '];'
+            line = line + self.java_data_type(var.dtype)['renderscript'] + ' ' + varname + ' = '
+            line = line + var.arrayname + '[' + index_var + '];'
             lines.append(line)
         # simply declare variables that will be written but not read
-        for var in write:
-            if var not in read:
-                spec = specifiers[var]
-                line = java_data_type(spec.dtype) + ' ' + var + ';'
+        for varname in write:
+            if varname not in read:
+                var = variables[varname]
+                line = self.java_data_type(var.dtype)['renderscript'] + ' ' + varname + ';'
                 lines.append(line)
         # the actual code
         lines.extend([self.translate_statement(stmt) for stmt in statements])
         # write arrays
-        for var in write:
-            index_var = specifiers[var].index
-            index_spec = indices[index_var]
-            spec = specifiers[var]
-            line = spec.arrayname + '[' + index_var + '] = ' + var + ';'
+        for varname in write:
+            index_var = variable_indices[varname]
+            var = variables[varname]
+            line = var.arrayname + '[' + index_var + '] = ' + varname + ';'
             lines.append(line)
         code = '\n'.join(lines)
         lines = []
+        # It is possible that several different variable names refer to the
+        # same array. E.g. in gapjunction code, v_pre and v_post refer to the
+        # same array if a group is connected to itself
+        arraynames = set()
+        for varname, var in variables.iteritems():
+            if isinstance(var, ArrayVariable):
+                arrayname = var.arrayname
+                if not arrayname in arraynames:
+                    lines.append(line)
+                    arraynames.add(arrayname)
+
         # set up the functions
         user_functions = []
         support_code = ''
-        #for var, spec in itertools.chain(namespace.items(),
-        #                                 specifiers.items()):
-        #    if isinstance(spec, Function):
-        #        user_functions.append(var)
-        #        speccode = spec.code(self, var)
+        #for varname, variable in namespace.items():
+        #    if isinstance(variable, Function):
+        #        user_functions.append(varname)
+        #        speccode = variable.code(self, varname)
         #        support_code += '\n' + deindent(speccode['support_code'])
-        ## delete the user-defined functions from the namespace
-        #for func in user_functions:
-        #    del namespace[func]
+        #        # add the Python function with a leading '_python', if it
+        #        # exists. This allows the function to make use of the Python
+        #        # function via weave if necessary (e.g. in the case of randn)
+        #        if not variable.pyfunc is None:
+        #            pyfunc_name = '_python_' + varname
+        #            if pyfunc_name in namespace:
+        #                logger.warn(('Namespace already contains function %s, '
+        #                             'not replacing it') % pyfunc_name)
+        #            else:
+        #                namespace[pyfunc_name] = variable.pyfunc
+
+        # delete the user-defined functions from the namespace
+        for func in user_functions:
+            del namespace[func]
 
         # return
         return (stripped_deindented_lines(code),
                 {
                     'support_code_lines': stripped_deindented_lines(support_code),
-                    # 'denormals_code_lines': stripped_deindented_lines(self.denormals_to_zero_code()),
                  })
 

@@ -407,7 +407,6 @@ class Network(Nameable):
         rs_base_fn =  "stateupdate.rs"
         java_template_fn = os.path.join(template_path, java_base_fn)
         rs_template_fn = os.path.join(template_path, rs_base_fn)
-
         java_template_file = open(java_template_fn, 'r')
         rs_template_file = open(rs_template_fn, 'r')
         java_code = java_template_file.read()
@@ -417,6 +416,7 @@ class Network(Nameable):
 
         for obj in self.objects:
             for cont_obj in obj.contained_objects:
+                N = cont_obj.group.N
                 code_dict = cont_obj.codeobj()
                 # FILL IN JAVA TEMPLATE
                 if code_dict.has_key('java_array_decl'):
@@ -434,6 +434,7 @@ class Network(Nameable):
                 if code_dict.has_key('memory_bindings'):
                     java_code = java_code.replace('%MEMORY BINDINGS%',
                         code_dict['memory_bindings'])
+                java_code = java_code.replace('%N%', repr(N))
 
                 # FILL IN RENDERSCRIPT TEMPLATE
                 if code_dict.has_key('renderscript_array_decl'):

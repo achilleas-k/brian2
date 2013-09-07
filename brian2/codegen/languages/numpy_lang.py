@@ -1,5 +1,3 @@
-import os
-
 from .base import Language
 from brian2.parsing.rendering import NumpyNodeRenderer
 
