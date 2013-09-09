@@ -13,6 +13,7 @@ static double sqrt_rs(double);
 static double pow_rs(double, double);
 static int int_rs(bool);
 static float randn_rs();
+static double clip_rs(double, double, double);
 
 // exp(1) //
 static double exp_rs(double value) {
@@ -51,6 +52,15 @@ static float randn_rs() {
     y1 = x1 * w;
     y2 = x2 * w;
     return y1;
+}
+
+// clip(3) //
+static double clip_rs(double value, double a_min, double a_max) {
+    if (value < a_min)
+        return a_min;
+    if (value > a_max)
+        return a_max;
+    return value;
 }
 
 // END   CUSTOM FUNCTIONS //
