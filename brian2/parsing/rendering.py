@@ -243,7 +243,7 @@ class JavaNodeRenderer(NodeRenderer):
     
     def render_BinOp(self, node):
         if node.op.__class__.__name__=='Pow':
-            return 'pow(%s, %s)' % (self.render_node(node.left),
+            return 'pow_rs(%s, %s)' % (self.render_node(node.left),
                                     self.render_node(node.right))
         else:
             return NodeRenderer.render_BinOp(self, node)
@@ -252,11 +252,13 @@ class JavaNodeRenderer(NodeRenderer):
         return {'True': 'true',
                 'False': 'false',
                 # TODO: This should be handled differently
-                'randn': '_randn',
-                'rand': 'rng.nextFloat',
-                'clip': '_clip',
-                'exp': 'exp',
-                'bool': '_bool'}.get(node.id, node.id)
+                'randn': 'randn_rs',
+                'rand': 'rsRand',
+                'clip': 'clip_rs',
+                'exp': 'exp_rs',
+                'sqrt': 'sqrt_rs',
+                'bool': 'bool_rs',
+                'int_': 'int_rs'}.get(node.id, node.id)
 
     def render_Assign(self, node):
         return NodeRenderer.render_Assign(self, node)+';'
