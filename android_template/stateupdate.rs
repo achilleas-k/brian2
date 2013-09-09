@@ -12,7 +12,7 @@ static double exp_rs(double);
 static double sqrt_rs(double);
 static double pow_rs(double, double);
 static int int_rs(bool);
-static float randn_rs(int);
+static float randn_rs(const int);
 static double clip_rs(double, double, double);
 
 // exp(1) //
@@ -40,19 +40,27 @@ static int int_rs(bool value) {
 }
 
 // randn(1) -- normally distributed random var //
-static float randn_rs(int idx) {
-    // NOTE: Use idx???
-    float x1, x2, w, y1, y2;
-    do {
-        x1 = 2.0 * rsRand(1.0f) - 1.0;
-        x2 = 2.0 * rsRand(1.0f) - 1.0;
-        w = x1 * x1 + x2 * x2;
-    } while ( w >= 1.0 );
+static float randn_rs(const int vectorisation_idx) {
+    float x1, x2, w;
+    static float y1, y2;
+    static bool need_values = true;
+    if (need_values) {
+        do {
+            x1 = 2.0 * rsRand(1.0f) - 1.0;
+            x2 = 2.0 * rsRand(1.0f) - 1.0;
+            w = x1 * x1 + x2 * x2;
+        } while ( w >= 1.0 );
 
-    w = sqrt_rs( (-2.0 * log( w ) ) / w );
-    y1 = x1 * w;
-    y2 = x2 * w;
-    return y1;
+        w = sqrt_rs( (-2.0 * log( w ) ) / w );
+        y1 = x1 * w;
+        y2 = x2 * w;
+
+        need_values = false;
+        return y1;
+    } else {
+        need_values = true;
+        return y2;
+    }
 }
 
 // clip(3) //
