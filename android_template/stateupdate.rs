@@ -12,7 +12,7 @@ static double exp_rs(double);
 static double sqrt_rs(double);
 static double pow_rs(double, double);
 static int int_rs(bool);
-static float randn_rs();
+static float randn_rs(int);
 static double clip_rs(double, double, double);
 
 // exp(1) //
@@ -39,8 +39,9 @@ static int int_rs(bool value) {
     return value ? 1 : 0;
 }
 
-// randn() -- normally distributed random var //
-static float randn_rs() {
+// randn(1) -- normally distributed random var //
+static float randn_rs(int idx) {
+    // NOTE: Use idx???
     float x1, x2, w, y1, y2;
     do {
         x1 = 2.0 * rsRand(1.0f) - 1.0;
@@ -70,9 +71,9 @@ static double clip_rs(double value, double a_min, double a_max) {
 %RENDERSCRIPT CONSTANTS%
 
 int32_t __attribute__((kernel)) update(int32_t _idx) {
-    const int _neuron_idx = _idx;
+    const int _vectorisation_idx = _idx;
     %STATE UPDATERS%
-    return _neuron_idx;
+    return _vectorisation_idx;
 }
 
 

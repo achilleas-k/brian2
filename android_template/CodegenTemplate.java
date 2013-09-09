@@ -26,6 +26,8 @@ public class CodegenTemplate { //extends AsyncTask<Void, String, Void> {
     float t;
     float progress;
 
+    long runtimeDuration = -1;
+
     private String simulationStatus;
     private final String DESCRIPTION = "%%% SIMULATION DESCRIPTION %%%";
 
@@ -58,6 +60,10 @@ public class CodegenTemplate { //extends AsyncTask<Void, String, Void> {
         return DESCRIPTION;
     }
 
+    public String getRuntimeDuration() {
+        return ""+runtimeDuration;
+    }
+
     protected void setStatusText(String statusText) {
         simulationStatus = statusText;
     }
@@ -66,14 +72,7 @@ public class CodegenTemplate { //extends AsyncTask<Void, String, Void> {
         simulationStatus += extraText;
     }
 
-
     //*********** %% GLOBAL VARS %% **********//
-    /*
-     * For each state variable:
-     * type[] %%VARNAME%%;
-     * Allocation %%VARNAME%%_rs;
-     *
-     */
 
     %JAVA ARRAY DECLARATIONS%
 
@@ -82,25 +81,11 @@ public class CodegenTemplate { //extends AsyncTask<Void, String, Void> {
     Allocation idx_allocation;
     Allocation out;
     public void setup() {
-        /*
-         * duration and dt.
-         */
         _duration = 1;
         dt = 0.0001f;
         mRS = RenderScript.create(bdContext);
         mScript = new ScriptC_stateupdate(mRS);
-        // SIMULATION PARAMS (N and dt)
         mScript.set_dt(dt);
-
-        /*
-         * For each state variable:
-         * %%VARNAME%% = new type[N];
-         * %%VARNAME%%_rs = Allocation.createSized(mRS, Element.%RSTYPE%(mRS), N);
-         * mScript.bind_%%VARNAME%%(%%VARNAME%%_rs);
-         *
-         * where %RSTYPE% is the renderscript type that corresponds to ``type``
-         *
-         */
 
         %JAVA ARRAY INITIALISATIONS%
 
@@ -125,21 +110,13 @@ public class CodegenTemplate { //extends AsyncTask<Void, String, Void> {
         idx_allocation.copyFrom(idx_arr);
         float[] zeros = new float[%N%];
         Arrays.fill(zeros, 0f);
-        /*
-         * For each state variable:
-         * %%VARNAME%%_rs.copyFrom(zeros);
-         *
-         *
-         * This is for initialising all state vars to zero.
-         * May be redundant or unnecessary.
-         *
-         */
-
+        long sim_start = System.currentTimeMillis();
         for (t=0; t<_duration; t+=dt) {
             mScript.set_t(t);
             mScript.forEach_update(idx_allocation, out);
             mRS.finish();
         }
+        runtimeDuration = System.currentTimeMillis()-sim_start;
         Log.d(LOGID, "DONE!");
 
     }
