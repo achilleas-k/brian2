@@ -26,7 +26,7 @@ dh/dt = 0.128*exp((17.*mV-v+VT)/(18.*mV))/ms*(1.-h)-4./(1+exp((40.*mV-v+VT)/(5.*
 I : amp
 ''')
 nrngroup = NeuronGroup(N, model=eqs, threshold='not_refractory and (v>-40*mV)',
-        refractory='v>-40*mV', name="mynrngroup")
+        refractory='v>-40*mV', name="mynrngroup", codeobj_class=JavaCodeObject)
 mynetwork = Network(nrngroup, name="Test")
 
 mynetwork.generate_code()
