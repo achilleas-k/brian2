@@ -1,4 +1,5 @@
 import functools
+import weakref
 
 from brian2.core.variables import (ArrayVariable, Variable,
                                     AttributeVariable, Subexpression,
@@ -6,6 +7,7 @@ from brian2.core.variables import (ArrayVariable, Variable,
 from .functions.base import Function
 from brian2.core.preferences import brian_prefs
 from brian2.core.names import Nameable, find_name
+from brian2.core.base import Updater
 from brian2.utils.logger import get_logger
 from .translation import translate
 from .runtime.targets import runtime_targets
@@ -13,7 +15,7 @@ from brian2.codegen.languages import java_lang
 
 __all__ = ['CodeObject',
            'create_codeobject',
-           'get_codeobject_template',
+           'CodeObjectUpdater',
            ]
 
 logger = get_logger(__name__)
@@ -32,7 +34,6 @@ def get_default_codeobject_class():
                              " one of %s" % (codeobj_class, runtime_targets.keys()))
     return codeobj_class
 
-
 def prepare_namespace(namespace, variables):
     namespace = dict(namespace)
     # Add variables referring to the arrays
@@ -46,7 +47,7 @@ def prepare_namespace(namespace, variables):
 
 
 def create_codeobject(name, abstract_code, namespace, variables, template_name,
-                      indices, variable_indices, codeobj_class=None,
+                      indices, variable_indices, codeobj_class,
                       template_kwds=None):
     '''
     The following arguments keywords are passed to the template:
@@ -64,43 +65,40 @@ def create_codeobject(name, abstract_code, namespace, variables, template_name,
     else:
         template_kwds = template_kwds.copy()
 
-    if codeobj_class is None:
-        codeobj_class = get_default_codeobject_class()
-
-    template = get_codeobject_template(template_name,
-                                       codeobj_class=codeobj_class)
+    template = getattr(codeobj_class.templater, template_name)
 
     namespace = prepare_namespace(namespace, variables)
 
     logger.debug(name + " abstract code:\n" + abstract_code)
     iterate_all = template.iterate_all
-    innercode, kwds = translate(abstract_code, variables, namespace,
-                                dtype=brian_prefs['core.default_scalar_dtype'],
-                                language=codeobj_class.language,
-                                variable_indices=variable_indices,
-                                iterate_all=iterate_all)
+    if isinstance(abstract_code, dict):
+        snippet = {}
+        kwds = {}
+        for ac_name, ac in abstract_code.iteritems():
+            snip, snip_kwds = translate(ac, variables, namespace,
+                                        dtype=brian_prefs['core.default_scalar_dtype'],
+                                        language=codeobj_class.language,
+                                        variable_indices=variable_indices,
+                                        iterate_all=iterate_all)
+            snippet[ac_name] = snip
+            for k, v in snip_kwds:
+                kwds[ac_name+'_'+k] = v
+            
+    else:
+        snippet, kwds = translate(abstract_code, variables, namespace,
+                                  dtype=brian_prefs['core.default_scalar_dtype'],
+                                  language=codeobj_class.language,
+                                  variable_indices=variable_indices,
+                                  iterate_all=iterate_all)
     template_kwds.update(kwds)
-    logger.debug(name + " inner code:\n" + str(innercode))
-
+    logger.debug(name + " snippet:\n" + str(snippet))
     name = find_name(name)
-
-    code = template(innercode, **template_kwds)
-    logger.debug(name + " code:\n" + str(code))
-
     variables.update(indices)
-    codeobj = codeobj_class(code, namespace, variables)#, name=name)
-    #codeobj.compile()
+    code = template(snippet, variables=variables, codeobj_name=name, namespace=namespace, **template_kwds)
+    logger.debug(name + " code:\n" + str(code))
+    codeobj = codeobj_class(code, namespace, variables, name=name)
+    codeobj.compile()
     return codeobj
-
-
-def get_codeobject_template(name, codeobj_class=None):
-    '''
-    Returns the `CodeObject` template ``name`` from the default or given class.
-    '''
-    if codeobj_class is None:
-        codeobj_class = get_default_codeobject_class()
-    return getattr(codeobj_class.templater, name)
-
 
 class CodeObject(Nameable):
     '''
@@ -184,3 +182,17 @@ class CodeObject(Nameable):
         defined during the call of `Language.code_object`.
         '''
         raise NotImplementedError()
+
+    def get_updater(self):
+        '''
+        Returns a `CodeObjectUpdater` that updates this `CodeObject`
+        '''
+        return CodeObjectUpdater(self)
+
+
+class CodeObjectUpdater(Updater):
+    '''
+    Used to update ``CodeObject``.
+    '''
+    def run(self):
+        self.owner()

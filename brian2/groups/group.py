@@ -13,10 +13,11 @@ from brian2.core.variables import (ArrayVariable, StochasticVariable,
 from brian2.core.namespace import get_local_namespace
 from brian2.units.fundamentalunits import fail_for_dimension_mismatch, Unit
 from brian2.units.allunits import second
-from brian2.codegen.codeobject import get_codeobject_template, create_codeobject
+from brian2.codegen.codeobject import create_codeobject
 from brian2.codegen.translation import analyse_identifiers
 from brian2.equations.unitcheck import check_units_statements
 from brian2.utils.logger import get_logger
+from brian2.devices.device import get_device
 
 __all__ = ['Group', 'GroupCodeRunner']
 
@@ -318,9 +319,9 @@ def create_runner_codeobj(group, code, template_name, indices=None,
     if check_units:
         check_code_units(code, group, additional_variables=additional_variables,
                          additional_namespace=additional_namespace)
-
-    template = get_codeobject_template(template_name,
-                                       codeobj_class=group.codeobj_class)
+        
+    codeobj_class = get_device().code_object_class(group.codeobj_class)
+    template = getattr(codeobj_class.templater, template_name)
 
     all_variables = dict(group.variables)
     if additional_variables is not None:
@@ -367,7 +368,8 @@ def create_runner_codeobj(group, code, template_name, indices=None,
     if variable_indices is None:
         variable_indices = group.variable_indices
 
-    return create_codeobject(name,
+    return get_device().code_object(
+                             name,
                              code,
                              resolved_namespace,
                              variables,
@@ -458,32 +460,5 @@ class GroupCodeRunner(BrianObject):
                                              additional_variables=additional_variables,
                                              additional_namespace=namespace,
                                              template_kwds=self.template_kwds)
-    
-    def pre_update(self):
-        '''
-        Will be called in every timestep before the `update` method is called.
-        
-        Does nothing by default.
-        '''
-        pass
-    
-    def update(self, **kwds):
-        self.pre_update()
-        return_value = self.codeobj(**kwds)
-        self.post_update(return_value)
-
-    def post_update(self, return_value):
-        '''
-        Will be called in every timestep after the `update` method is called.
-        
-        Overwritten in `Thresholder` to update the ``spikes`` list saved in 
-        a `NeuronGroup`.
-        
-        Does nothing by default.
-        
-        Parameters
-        ----------
-        return_value : object
-            The result returned from calling the `CodeObject`.
-        '''
-        pass
+        self.code_objects[:] = [weakref.proxy(self.codeobj)]
+        self.updaters[:] = [self.codeobj.get_updater()]
