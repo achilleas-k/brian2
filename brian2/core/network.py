@@ -1,5 +1,6 @@
 import weakref
 import time
+from warnings import warn
 
 from brian2.utils.logger import get_logger
 from brian2.core.names import Nameable
@@ -414,8 +415,11 @@ class Network(Nameable):
         java_template_file.close()
         rs_template_file.close()
 
+        first_clock = self.objects[0].contained_objects[0].clock
         for obj in self.objects:
             for cont_obj in obj.contained_objects:
+                if cont_obj.clock is not first_clock:
+                    warn("Multiple clocks not supported yet.")
                 N = cont_obj.group.N
                 dt = cont_obj.clock.dt_
                 code_dict = cont_obj.codeobj()
