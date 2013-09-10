@@ -22,8 +22,8 @@ public class CodegenTemplate { //extends AsyncTask<Void, String, Void> {
     private final static String LOGID = "org.briansimulator.briandroidtemplate.CodegenTemplate";
     Context bdContext;
     float _duration;
-    float dt;
     float t;
+    float dt;
     float progress;
 
     long runtimeDuration = -1;
@@ -82,10 +82,9 @@ public class CodegenTemplate { //extends AsyncTask<Void, String, Void> {
     Allocation out;
     public void setup() {
         _duration = 1;
-        dt = 0.0001f;
+        dt = %dt%;
         mRS = RenderScript.create(bdContext);
         mScript = new ScriptC_stateupdate(mRS);
-        mScript.set_dt(dt);
 
         %JAVA ARRAY INITIALISATIONS%
 

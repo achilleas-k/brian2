@@ -417,6 +417,7 @@ class Network(Nameable):
         for obj in self.objects:
             for cont_obj in obj.contained_objects:
                 N = cont_obj.group.N
+                dt = cont_obj.clock.dt_
                 code_dict = cont_obj.codeobj()
                 # FILL IN JAVA TEMPLATE
                 if code_dict.has_key('java_array_decl'):
@@ -435,6 +436,7 @@ class Network(Nameable):
                     java_code = java_code.replace('%MEMORY BINDINGS%',
                         code_dict['memory_bindings'])
                 java_code = java_code.replace('%N%', repr(N))
+                java_code = java_code.replace('%dt%', repr(dt)+'f')
 
                 # FILL IN RENDERSCRIPT TEMPLATE
                 if code_dict.has_key('renderscript_array_decl'):

@@ -1,7 +1,6 @@
 #pragma version(1)
 #pragma rs java_package_name(org.briansimulator.briandroidtemplate)
 
-float dt;
 float t;
 
 // START CUSTOM FUNCTIONS //
