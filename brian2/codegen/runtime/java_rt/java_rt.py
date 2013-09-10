@@ -41,16 +41,99 @@ class JavaCodeObject(CodeObject):
                                        'templates'))
     language = JavaLanguage()
 
-    def __init__(self, code, namespace, specifiers):
-        super(JavaCodeObject, self).__init__(code, namespace, specifiers)
-        self.compiler = brian_prefs['codegen.runtime.java.compiler']
-        self.extra_compile_args = brian_prefs['codegen.runtime.java.extra_compile_args']
+    def __init__(self, code, namespace, variables, name='codeobject*'):
+        super(JavaCodeObject, self).__init__(code, namespace, variables, name=name)
+        self.code = code
+        self.variables = variables
+        self.namespace = namespace
+        constants = []
+        arrays = []
+        functions = []
+        for k, v in namespace.items():
+            if isinstance(v, float):
+                # TODO: Use the language submodule to translate
+                dtype = "float"
+                constants.append((dtype, k, repr(v)+'f'))
+            elif isinstance(v, int):
+                dtype = "int"
+                constants.append((dtype, k, repr(v)))
+            elif hasattr(v, '__call__'):
+                functions.append((k, v))
+
+        for k, v in variables.items():
+            if isinstance (v, ArrayVariable):
+                dtype_spec = java_lang.java_data_type(v.dtype)
+                # TODO: Perhaps it would be more convenient as a dictionary?
+                arrays.append((v.arrayname, dtype_spec, len(v.value)))
+
+        nonconstant_values = []
+        for name, var in self.variables.iteritems():
+            if isinstance(var, Variable) and not isinstance(var, Subexpression):
+                if not var.constant:
+                    nonconstant_values.append((name, var.get_value))
+                    if not var.scalar:
+                        nonconstant_values.append(('_num' + name,
+                                                        var.get_len))
+                else:
+                    try:
+                        value = var.get_value()
+                    except TypeError:  # A dummy Variable without value
+                        continue
+                    self.namespace[name] = value
+                    # if it is a type that has a length, add a variable called
+                    # '_num'+name with its length
+                    if not var.scalar:
+                        self.namespace['_num' + name] = var.get_len()
+
+        self.arrays = arrays
+        self.constants = constants
+        self.functions = functions
+        self.nonconstant_values = nonconstant_values
 
     def run(self):
-        return java.inline(self.code.main, self.namespace.keys(),
-                            local_dict=self.namespace,
-                            support_code=self.code.support_code,
-                            compiler=self.compiler,
-                            extra_compile_args=self.extra_compile_args)
+        # generate code
+        # TODO: Tidy up this code
+        code = {}
+        constants = self.constants
+        arrays = self.arrays
+        functions = self.functions
+        if len(constants) > 0:
+            code['constants'] = '// CONSTANT DECLARATIONS\n'
+            for dtype, k, v in constants:
+                code['constants'] += 'const %s %s = %s;\n' % (dtype, k, v)
+
+
+        # array definitions for Java
+        if len(arrays) > 0:
+            code['java_array_decl'] = '// JAVA ARRAY DEFINITIONS\n'
+            code['java_array_init'] = '// JAVA ARRAY INITIALISATIONS\n'
+            code['renderscript_array_decl'] = '// RENDERSCRIPT ARRAY DEFINITIONS\n'
+            code['allocation_decl'] = '// ALLOCATION DEFINITIONS\n'
+            code['allocation_init'] = '// ALLOCATION INITIALISATIONS\n'
+            code['memory_bindings'] = '// MEMORY BINDINGS\n'
+            for varname, dtype_spec, N in arrays:
+                varname_alloc = varname+"_alloc"
+                javatype = dtype_spec['java']
+                rstype = dtype_spec['renderscript']
+                alloctype = dtype_spec['allocation']
+                code['java_array_decl'] += '%s[] %s;\n' % (javatype, varname)
+                code['java_array_init'] += '%s = new %s[%s];\n' % (varname,
+                                                                   javatype, N)
+                code['renderscript_array_decl'] += '%s *%s;\n' % (rstype, varname)
+                code['allocation_decl'] += 'Allocation %s;\n' % (varname_alloc)
+                code['allocation_init'] += \
+                    '%s = Allocation.createSized(mRS, Element.%s(mRS), %s);\n' % (varname_alloc, alloctype, N)
+                code['memory_bindings'] += 'mScript.bind_%s(%s);\n' % (varname, varname_alloc)
+
+        # Allocations for input and output of renderscript kernel(s)
+        #code += ('in_%s = Allocation.createSized('
+        #        'mRS, Element.I32(mRS), %s);\n' % (nrngrp.name, numneurons))
+        #code += ('out_%s = Allocation.createSized('
+        #        'mRS, Element.I32(mRS), %s);\n' % (nrngrp.name, numneurons))
+
+        if len(code) > 0:
+            code['state_updaters'] = '// STATE UPDATERS FOR %s\n' % (self.name)
+            code['state_updaters'] += self.code.main+'\n'
+        return code
 
 runtime_targets['java'] = JavaCodeObject
