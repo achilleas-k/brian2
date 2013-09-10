@@ -21,8 +21,8 @@ group = NeuronGroup(N, model=eqs, threshold='v>10 * mV',
                     codeobj_class=JavaCodeObject)
 group.v = 0 * mV
 group.v0 = linspace(0 * mV, 20 * mV, N)
-mynetwork = Network(group, name="Test")
 monitor = SpikeMonitor(group)
+mynetwork = Network(group, monitor, name="Test")
 mynetwork.generate_code()
 print("Code generation complete!")
 
