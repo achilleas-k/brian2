@@ -121,6 +121,36 @@ class CodeObject(Nameable):
 
     def __init__(self, code, namespace, variables, name='codeobject*'):
         Nameable.__init__(self, name=name)
+        self.code = code
+        self.compile_methods = self.get_compile_methods(variables)
+        self.namespace = namespace
+        self.variables = variables
+
+        # Variables can refer to values that are either constant (e.g. dt)
+        # or change every timestep (e.g. t). We add the values of the
+        # constant variables here and add the names of non-constant variables
+        # to a list
+
+        # A list containing tuples of name and a function giving the value
+        self.nonconstant_values = []
+
+        for name, var in self.variables.iteritems():
+            if isinstance(var, Variable) and not isinstance(var, Subexpression):
+                if not var.constant:
+                    self.nonconstant_values.append((name, var.get_value))
+                    if not var.scalar:
+                        self.nonconstant_values.append(('_num' + name,
+                                                        var.get_len))
+                else:
+                    try:
+                        value = var.get_value()
+                    except TypeError:  # A dummy Variable without value
+                        continue
+                    self.namespace[name] = value
+                    # if it is a type that has a length, add a variable called
+                    # '_num'+name with its length
+                    if not var.scalar:
+                        self.namespace['_num' + name] = var.get_len()
 
     def get_compile_methods(self, variables):
         meths = []
