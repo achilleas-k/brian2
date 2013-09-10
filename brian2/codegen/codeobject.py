@@ -182,7 +182,16 @@ class CodeObject(Nameable):
         for meth in self.compile_methods:
             meth(self.namespace)
 
-    def __call__(self):
+    def __call__(self, **kwds):
+        # update the values of the non-constant values in the namespace
+        for name, func in self.nonconstant_values:
+            self.namespace[name] = func()
+
+        self.namespace.update(**kwds)
+
+        return self.run()
+
+    def run(self):
         # generate code
         # TODO: Tidy up this code
         code = {}
