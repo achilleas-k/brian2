@@ -424,34 +424,35 @@ class Network(Nameable):
                 dt = cont_obj.clock.dt_
                 code_dict = cont_obj.codeobj()
                 # FILL IN JAVA TEMPLATE
-                if code_dict.has_key('java_array_decl'):
+                if 'java_array_decl' in code_dict:
                     java_code = java_code.replace('%JAVA ARRAY DECLARATIONS%',
-                            code_dict['java_array_decl'])
-                if code_dict.has_key('java_array_init'):
+                                                  code_dict['java_array_decl'])
+                if 'java_array_init' in code_dict:
                     java_code = java_code.replace('%JAVA ARRAY INITIALISATIONS%',
-                            code_dict['java_array_init'])
-                if code_dict.has_key('allocation_decl'):
+                                                  code_dict['java_array_init'])
+                if 'allocation_decl' in code_dict:
                     java_code = java_code.replace('%ALLOCATION DECLARATIONS%',
-                            code_dict['allocation_decl'])
-                if code_dict.has_key('allocation_init'):
+                                                  code_dict['allocation_decl'])
+                if 'allocation_init' in code_dict:
                     java_code = java_code.replace('%ALLOCATION INITIALISATIONS%',
-                            code_dict['allocation_init'])
-                if code_dict.has_key('memory_bindings'):
+                                                  code_dict['allocation_init'])
+                if 'memory_bindings' in code_dict:
                     java_code = java_code.replace('%MEMORY BINDINGS%',
-                        code_dict['memory_bindings'])
+                                              code_dict['memory_bindings'])
                 java_code = java_code.replace('%N%', repr(N))
                 java_code = java_code.replace('%dt%', repr(dt)+'f')
 
                 # FILL IN RENDERSCRIPT TEMPLATE
-                if code_dict.has_key('renderscript_array_decl'):
+                if 'renderscript_array_decl' in code_dict:
                     rs_code = rs_code.replace('%RENDERSCRIPT ARRAYS%',
-                            code_dict['renderscript_array_decl'])
-                if code_dict.has_key('constants'):
+                                              code_dict['renderscript_array_decl'])
+                if 'constants' in code_dict:
                     rs_code = rs_code.replace('%RENDERSCRIPT CONSTANTS%',
-                            code_dict['constants'])
-                if code_dict.has_key('state_updaters'):
+                                              code_dict['constants'])
+                if 'state_updaters' in code_dict:
                     rs_code = rs_code.replace('%STATE UPDATERS%',
-                            code_dict['state_updaters'])
+                                              code_dict['state_updaters']+"\n\n%STATE UPDATERS%\n")
+        rs_code = rs_code.replace('%STATE UPDATERS%', '')
 
         if not os.path.exists("./output"):
             os.makedirs("./output")
