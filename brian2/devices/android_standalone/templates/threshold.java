@@ -1,7 +1,8 @@
 ////////////////////////////////////////////////////////////////////////////
 //// MAIN CODE /////////////////////////////////////////////////////////////
 
-{% macro cpp_file() %}
+{% macro java_file() %}
+// USES_VARIABLES { not_refractory, lastspike, t, _spikespace }
 
 #include "{{codeobj_name}}.h"
 #include<math.h>
@@ -19,6 +20,10 @@ namespace {
 {{line}}
 {% endfor %}
 
+{% if variables is defined %}
+{% set _spikespace = variables['_spikespace'].arrayname %}
+{% endif %}
+
 void _run_{{codeobj_name}}(double t)
 {
 	///// CONSTANTS ///////////
@@ -29,14 +34,23 @@ void _run_{{codeobj_name}}(double t)
 	{% endfor %}
 
 	//// MAIN CODE ////////////
+	long _cpp_numspikes = 0;
 	for(int _idx=0; _idx<_num_idx; _idx++)
 	{
-		// THIS MESSAGE IS JUST TO LET YOU KNOW WE'RE IN THE STANDALONE NOT WEAVE TEMPLATE
 	    const int _vectorisation_idx = _idx;
 		{% for line in code_lines %}
 		{{line}}
 		{% endfor %}
+		if(_cond) {
+			{{_spikespace}}[_cpp_numspikes++] = _idx;
+			// We have to use the pointer names directly here: The condition
+			// might contain references to not_refractory or lastspike and in
+			// that case the names will refer to a single entry.
+			_ptr{{_array_not_refractory}}[_idx] = false;
+			_ptr{{_array_lastspike}}[_idx] = t;
+		}
 	}
+	{{_spikespace}}[_num_idx] = _cpp_numspikes;
 }
 {% endmacro %}
 

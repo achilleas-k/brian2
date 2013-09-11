@@ -1,8 +1,7 @@
 ////////////////////////////////////////////////////////////////////////////
 //// MAIN CODE /////////////////////////////////////////////////////////////
 
-{% macro cpp_file() %}
-	// USES_VARIABLES { _spikespace }
+{% macro java_file() %}
 
 #include "{{codeobj_name}}.h"
 #include<math.h>
@@ -20,10 +19,6 @@ namespace {
 {{line}}
 {% endfor %}
 
-{% if variables is defined %}
-{% set _spikespace = variables['_spikespace'].arrayname %}
-{% endif %}
-
 void _run_{{codeobj_name}}(double t)
 {
 	///// CONSTANTS ///////////
@@ -33,14 +28,11 @@ void _run_{{codeobj_name}}(double t)
 	{{line}}
 	{% endfor %}
 
-	const int *_spikes = {{_spikespace}};
-	const int _num_spikes = {{_spikespace}}[_num_idx];
-
 	//// MAIN CODE ////////////
-	for(int _index_spikes=0; _index_spikes<_num_spikes; _index_spikes++)
+	for(int _idx=0; _idx<_num_idx; _idx++)
 	{
-		const int _idx = _spikes[_index_spikes];
-		const int _vectorisation_idx = _idx;
+		// THIS MESSAGE IS JUST TO LET YOU KNOW WE'RE IN THE STANDALONE NOT WEAVE TEMPLATE
+	    const int _vectorisation_idx = _idx;
 		{% for line in code_lines %}
 		{{line}}
 		{% endfor %}

@@ -1,4 +1,4 @@
-{% macro cpp_file() %}
+{% macro java_file() %}
 
 #include<stdint.h>
 #include<vector>
