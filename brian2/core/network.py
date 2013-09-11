@@ -419,6 +419,7 @@ class Network(Nameable):
         first_clock = self.objects[0].contained_objects[0].clock
         for obj in self.objects:
             for cont_obj in obj.contained_objects:
+                print cont_obj
                 if cont_obj.clock is not first_clock:
                     warn("Multiple clocks not supported yet.")
                 N = cont_obj.group.N
