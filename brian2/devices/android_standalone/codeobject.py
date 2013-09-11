@@ -5,9 +5,9 @@ from brian2.codegen.codeobject import CodeObject
 from brian2.codegen.templates import Templater
 from brian2.codegen.languages import java_lang
 from brian2.core.variables import ArrayVariable
+from brian2.core.variables import ArrayVariable, Variable, Subexpression
 
 __all__ = ['AndroidStandaloneCodeObject']
-
 
 
 class AndroidStandaloneCodeObject(CodeObject):
@@ -24,13 +24,19 @@ class AndroidStandaloneCodeObject(CodeObject):
 
     def __init__(self, code, namespace, variables, name='codeobject*'):
         super(AndroidStandaloneCodeObject, self).__init__(code, namespace, variables, name=name)
-        self.code = code
-        self.variables = variables
-        self.namespace = namespace
+
+    def variables_to_namespace(self):
+        # Variables can refer to values that are either constant (e.g. dt)
+        # or change every timestep (e.g. t). We add the values of the
+        # constant variables here and add the names of non-constant variables
+        # to a list
+
+        # A list containing tuples of name and a function giving the value
+        self.nonconstant_values = []
         constants = []
         arrays = []
         functions = []
-        for k, v in namespace.items():
+        for k, v in self.namespace.items():
             if isinstance(v, float):
                 # TODO: Use the language submodule to translate
                 dtype = "float"
@@ -40,7 +46,7 @@ class AndroidStandaloneCodeObject(CodeObject):
                 constants.append((dtype, k, repr(v)))
             elif hasattr(v, '__call__'):
                 functions.append((k, v))
-        for k, v in variables.items():
+        for k, v in self.variables.items():
             if isinstance (v, ArrayVariable):
                 dtype_spec = java_lang.java_data_type(v.dtype)
                 # TODO: Perhaps it would be more convenient as a dictionary?
@@ -49,6 +55,24 @@ class AndroidStandaloneCodeObject(CodeObject):
         self.constants = constants
         self.functions = functions
 
+        for name, var in self.variables.iteritems():
+            if isinstance(var, Variable) and not isinstance(var, Subexpression):
+                if not var.constant:
+                    self.nonconstant_values.append((name, var.get_value))
+                    if not var.scalar:
+                        self.nonconstant_values.append(('_num' + name,
+                                                        var.get_len))
+                else:
+                    try:
+                        value = var.get_value()
+                    except TypeError:  # A dummy Variable without value
+                        continue
+                    self.namespace[name] = value
+                    # if it is a type that has a length, add a variable called
+                    # '_num'+name with its length
+                    if not var.scalar:
+                        self.namespace['_num' + name] = var.get_len()
+
     def run(self):
         # generate code
         # TODO: Tidy up this code
@@ -56,6 +80,16 @@ class AndroidStandaloneCodeObject(CodeObject):
         constants = self.constants
         arrays = self.arrays
         functions = self.functions
+        print "constants:"
+        for const in constants:
+            print ', '.join(const)
+        print "arrays:"
+        for arr in arrays:
+            print arr
+        print "functions:"
+        for func in functions:
+            print func
+        print "----\n\n"
         if len(constants) > 0:
             code['constants'] = '// CONSTANT DECLARATIONS\n'
             for dtype, k, v in constants:
@@ -92,4 +126,3 @@ class AndroidStandaloneCodeObject(CodeObject):
             code['state_updaters'] = '// STATE UPDATERS FOR %s\n' % (self.name)
             code['state_updaters'] += self.code.main+'\n'
         return code
-

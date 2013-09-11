@@ -87,8 +87,8 @@ class AndroidStandaloneDevice(Device):
             os.mkdir('output')
 
         # Write the arrays            
-        array_specs = [(k, c_data_type(v.dtype), len(v)) for k, v in self.arrays.iteritems()]
-        dynamic_array_specs = [(k, c_data_type(v.dtype)) for k, v in self.dynamic_arrays.iteritems()]
+        array_specs = [(k, java_data_type(v.dtype), len(v)) for k, v in self.arrays.iteritems()]
+        dynamic_array_specs = [(k, java_data_type(v.dtype)) for k, v in self.dynamic_arrays.iteritems()]
         arr_tmp = AndroidStandaloneCodeObject.templater.arrays(None, array_specs=array_specs,
                                                            dynamic_array_specs=dynamic_array_specs)
         open('output/arrays.java', 'w').write(arr_tmp.java_file)
@@ -105,10 +105,10 @@ class AndroidStandaloneDevice(Device):
                     N = v.get_len()
                     code_object_defs[codeobj.name].append('const int _num%s = %s;' % (k, N))
                     if isinstance(v, DynamicArrayVariable):
-                        c_type = c_data_type(v.dtype)
+                        java_type = java_data_type(v.dtype)
                         # Create an alias name for the underlying array
-                        code = ('{c_type}* {arrayname} = '
-                                '&(_dynamic{arrayname}[0]);').format(c_type=c_type,
+                        code = ('{java_type}* {arrayname} = '
+                                '&(_dynamic{arrayname}[0]);').format(java_type=java_type,
                                                                       arrayname=v.arrayname)
                         code_object_defs[codeobj.name].append(code)
                     

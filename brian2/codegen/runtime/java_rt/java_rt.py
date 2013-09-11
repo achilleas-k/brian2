@@ -6,7 +6,8 @@ from ...languages import java_lang
 from ..targets import runtime_targets
 
 from brian2.core.preferences import brian_prefs, BrianPreference
-from brian2.core.variables import ArrayVariable
+from brian2.core.variables import ArrayVariable, Variable, Subexpression
+
 
 __all__ = ['JavaCodeObject']
 
@@ -56,7 +57,7 @@ class JavaCodeObject(CodeObject):
         constants = []
         arrays = []
         functions = []
-        for k, v in namespace.items():
+        for k, v in self.namespace.items():
             if isinstance(v, float):
                 # TODO: Use the language submodule to translate
                 dtype = "float"
@@ -66,7 +67,7 @@ class JavaCodeObject(CodeObject):
                 constants.append((dtype, k, repr(v)))
             elif hasattr(v, '__call__'):
                 functions.append((k, v))
-        for k, v in variables.items():
+        for k, v in self.variables.items():
             if isinstance (v, ArrayVariable):
                 dtype_spec = java_lang.java_data_type(v.dtype)
                 # TODO: Perhaps it would be more convenient as a dictionary?
