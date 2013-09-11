@@ -61,7 +61,7 @@ class JavaCodeObject(CodeObject):
             elif hasattr(v, '__call__'):
                 functions.append((k, v))
         for k, v in variables.items():
-            if isinstance (v, ArrayVariable):
+            if isinstance(v, ArrayVariable):
                 dtype_spec = java_lang.java_data_type(v.dtype)
                 # TODO: Perhaps it would be more convenient as a dictionary?
                 arrays.append((v.arrayname, dtype_spec, len(v.value)))

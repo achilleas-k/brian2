@@ -1,7 +1,8 @@
 ////////////////////////////////////////////////////////////////////////////
 //// MAIN CODE /////////////////////////////////////////////////////////////
 
-{% macro cpp_file() %}
+{% macro main() %}
+//**** reset.rs ****//
 	// USES_VARIABLES { _spikespace }
 
 #include "{{codeobj_name}}.h"
@@ -48,16 +49,3 @@ void _run_{{codeobj_name}}(double t)
 }
 {% endmacro %}
 
-////////////////////////////////////////////////////////////////////////////
-//// HEADER FILE ///////////////////////////////////////////////////////////
-
-{% macro h_file() %}
-#ifndef _INCLUDED_{{codeobj_name}}
-#define _INCLUDED_{{codeobj_name}}
-
-#include "arrays.h"
-
-void _run_{{codeobj_name}}(double t);
-
-#endif
-{% endmacro %}

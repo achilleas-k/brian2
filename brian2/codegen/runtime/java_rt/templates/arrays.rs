@@ -1,8 +1,5 @@
-{% macro cpp_file() %}
-
-#include<stdint.h>
-#include<vector>
-#include "arrays.h"
+{% macro main() %}
+//**** arrays.rs ****//
 
 // static arrays
 {% for (varname, dtype_spec, N) in array_specs %}
@@ -38,28 +35,3 @@ void _dealloc_arrays()
 
 /////////////////////////////////////////////////////////////////////////////////////////////////////
 
-{% macro h_file() %}
-
-#ifndef _BRIAN_ARRAYS_H
-#define _BRIAN_ARRAYS_H
-
-#include<vector>
-#include<stdint.h>
-
-// static arrays
-{% for (varname, dtype_spec, N) in array_specs %}
-extern {{dtype_spec}} *{{varname}};
-extern const int _num_{{varname}};
-{% endfor %}
-
-// dynamic arrays
-{% for (varname, dtype_spec) in dynamic_array_specs %}
-extern std::vector<{{dtype_spec}}> {{varname}};
-{% endfor %}
-
-void _init_arrays();
-void _dealloc_arrays();
-
-#endif
-
-{% endmacro %}
