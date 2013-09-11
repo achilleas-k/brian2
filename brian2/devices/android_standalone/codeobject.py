@@ -80,16 +80,6 @@ class AndroidStandaloneCodeObject(CodeObject):
         constants = self.constants
         arrays = self.arrays
         functions = self.functions
-        print "constants:"
-        for const in constants:
-            print ', '.join(const)
-        print "arrays:"
-        for arr in arrays:
-            print arr
-        print "functions:"
-        for func in functions:
-            print func
-        print "----\n\n"
         if len(constants) > 0:
             code['constants'] = '// CONSTANT DECLARATIONS\n'
             for dtype, k, v in constants:
