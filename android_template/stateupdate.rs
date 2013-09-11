@@ -77,10 +77,7 @@ static double clip_rs(double value, double a_min, double a_max) {
 
 %RENDERSCRIPT CONSTANTS%
 
-int32_t __attribute__((kernel)) update(int32_t _idx) {
-    const int _vectorisation_idx = _idx;
-    %STATE UPDATERS%
-    return _vectorisation_idx;
+%STATE UPDATERS%
 }
 
 

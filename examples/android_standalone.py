@@ -18,15 +18,16 @@ reset = 'V=-60*mV'
 refractory = 5*ms
 N = 1000
 
-##### Generate C++ code
-
-# Use a NeuronGroup to fake the whole process
-G = NeuronGroup(N, eqs, reset=reset, threshold=threshold, refractory=refractory, name='gp')
-G2 = NeuronGroup(1, eqs, reset=reset, threshold=threshold, refractory=refractory, name='gp2')
+G = NeuronGroup(N, eqs, reset=reset, threshold=threshold,
+                refractory=refractory, name='gp', codeobj_class=JavaCodeObject)
+G2 = NeuronGroup(1, eqs, reset=reset, threshold=threshold,
+                 refractory=refractory, name='gp2', codeobj_class=JavaCodeObject)
+SM = SpikeMonitor(G)
 # Run the network for 0 seconds to generate the code
-net = Network(G, G2)
-net.run(0*second)
-
+net = Network(G, G2, SM)
+net.generate_code()
+import sys
+sys.exit(0)
 # Extract all the CodeObjects
 # Note that since we ran the Network object, these CodeObjects will be sorted into the right
 # running order, assuming that there is only one clock
@@ -50,6 +51,8 @@ for (obj, k), v in vars.items():
 code_object_defs = defaultdict(list)
 for codeobj in code_objects:
     for k, v in codeobj.nonconstant_values:
+        print k
+        print v.im_class
         if k=='t' or k=='_spikes' or k=='_num_spikes':
             pass
         elif v.im_class is ArrayVariable:
@@ -95,12 +98,17 @@ arr_tmp = AndroidStandaloneCodeObject.templater.arrays(None, array_specs=arrays.
 open('output/arrays.java', 'w').write(arr_tmp.java_file)
 
 for codeobj in code_objects:
-    ns = codeobj.namespace
-    # TODO: fix these freeze/CONSTANTS hacks somehow - they work but not elegant. 
-    code = freeze(codeobj.code.java_file, ns)
-    code = code.replace('%CONSTANTS%', '\n'.join(code_object_defs[id(codeobj)]))
-    code = '#include "arrays.h"\n'+code
-    
-    open('output/'+codeobj.name+'.cpp', 'w').write(code)
-    open('output/'+codeobj.name+'.h', 'w').write(codeobj.code.h_file)
+    print "\n\nCode for "+codeobj.name+" ******************"
+    print "\n".join(codeobj.code.split('\n'))
+    print "*************** End code for "+codeobj.name
+
+#for codeobj in code_objects:
+#    ns = codeobj.namespace
+#    # TODO: fix these freeze/CONSTANTS hacks somehow - they work but not elegant.
+#    code = freeze(codeobj.code.java_file, ns)
+#    code = code.replace('%CONSTANTS%', '\n'.join(code_object_defs[id(codeobj)]))
+#    code = '#include "arrays.h"\n'+code
+#
+#    open('output/'+codeobj.name+'.cpp', 'w').write(code)
+#    open('output/'+codeobj.name+'.h', 'w').write(codeobj.code.h_file)
 

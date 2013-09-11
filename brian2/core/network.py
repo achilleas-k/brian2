@@ -406,7 +406,7 @@ class Network(Nameable):
         # NOTE: temporary template path
         template_path = os.path.join(os.path.split(os.path.split(os.path.abspath(os.path.dirname(__file__)))[0])[0], 'android_template')
         java_base_fn = "CodegenTemplate.java"
-        rs_base_fn =  "stateupdate.rs"
+        rs_base_fn = "stateupdate.rs"
         java_template_fn = os.path.join(template_path, java_base_fn)
         rs_template_fn = os.path.join(template_path, rs_base_fn)
         java_template_file = open(java_template_fn, 'r')

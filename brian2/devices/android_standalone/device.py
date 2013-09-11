@@ -134,7 +134,8 @@ class AndroidStandaloneDevice(Device):
             if cls is CodeObjectUpdater:
                 codeobj = updater.owner
                 ns = codeobj.namespace
-                # TODO: fix these freeze/CONSTANTS hacks somehow - they work but not elegant. 
+                # TODO: fix these freeze/CONSTANTS hacks somehow - they work but not elegant.
+                print codeobj.code
                 code = freeze(codeobj.code.java_file, ns)
                 code = code.replace('%CONSTANTS%', '\n'.join(code_object_defs[id(codeobj)]))
                 code = '#include "arrays.h"\n'+code
