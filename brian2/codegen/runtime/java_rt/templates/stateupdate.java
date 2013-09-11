@@ -13,7 +13,7 @@ int32_t __attribute__((kernel)) update_{{codeobj_name}}(int32_t _idx) {
     {% for line in code_lines %}
     {{line}}
     {% endfor %}
-    return _vectorisation_idx
+    return _vectorisation_idx;
 }
 
 {% endmacro %}

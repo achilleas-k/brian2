@@ -8,19 +8,23 @@
     // {{line}}
     {% endfor %}
 
+int run_{{codeobj_name}}() {
     //// MAIN CODE ////////////
-    ArrayList<Integer> _spikes_space = new ArrayList<Integer>();
-    // TODO: use normal array so I can pass to renderscript and add an extra variable for the number of spikes
-    // array size would be number of neurons
-    {% for line in code_lines %}
-    {{line}}
-    {% endfor %}
-    if(_cond) {
-        _spikes_space.add(_idx);
-        not_refractory[_idx] = false;
-        lastspike[_idx] = t;
+    long _numspikes = 0;
+    for (int _idx=0; _idx<_num_idx; _idx++) {
+        const int _vectorisation_idx = _idx;
+        {% for line in code_lines %}
+        {{line}}
+        {% endfor %}
+        if(_cond) {
+            _spikespace[_numspikes++] = _idx;
+            not_refractory[_idx] = false;
+            lastspike[_idx] = t;
+        }
+        _spikespace[_num_idx] = _numspikes;
+        return _numspikes;
     }
-    return_val = _spikes_space[_num_neurons];
+}
 {% endmacro %}
 
 ////////////////////////////////////////////////////////////////////////////
