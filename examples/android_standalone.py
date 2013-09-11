@@ -19,9 +19,9 @@ refractory = 5*ms
 N = 1000
 
 G = NeuronGroup(N, eqs, reset=reset, threshold=threshold,
-                refractory=refractory, name='gp', codeobj_class=JavaCodeObject)
+                refractory=refractory, name='gp', codeobj_class=AndroidStandaloneCodeObject)
 G2 = NeuronGroup(1, eqs, reset=reset, threshold=threshold,
-                 refractory=refractory, name='gp2', codeobj_class=JavaCodeObject)
+                 refractory=refractory, name='gp2', codeobj_class=AndroidStandaloneCodeObject)
 SM = SpikeMonitor(G)
 # Run the network for 0 seconds to generate the code
 net = Network(G, G2, SM)
