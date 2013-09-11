@@ -44,9 +44,15 @@ class JavaCodeObject(CodeObject):
 
     def __init__(self, code, namespace, variables, name='codeobject*'):
         super(JavaCodeObject, self).__init__(code, namespace, variables, name=name)
-        self.code = code
-        self.variables = variables
-        self.namespace = namespace
+
+    def variables_to_namespace(self):
+        # Variables can refer to values that are either constant (e.g. dt)
+        # or change every timestep (e.g. t). We add the values of the
+        # constant variables here and add the names of non-constant variables
+        # to a list
+
+        # A list containing tuples of name and a function giving the value
+        self.nonconstant_values = []
         constants = []
         arrays = []
         functions = []
@@ -68,6 +74,24 @@ class JavaCodeObject(CodeObject):
         self.arrays = arrays
         self.constants = constants
         self.functions = functions
+
+        for name, var in self.variables.iteritems():
+            if isinstance(var, Variable) and not isinstance(var, Subexpression):
+                if not var.constant:
+                    self.nonconstant_values.append((name, var.get_value))
+                    if not var.scalar:
+                        self.nonconstant_values.append(('_num' + name,
+                                                        var.get_len))
+                else:
+                    try:
+                        value = var.get_value()
+                    except TypeError:  # A dummy Variable without value
+                        continue
+                    self.namespace[name] = value
+                    # if it is a type that has a length, add a variable called
+                    # '_num'+name with its length
+                    if not var.scalar:
+                        self.namespace['_num' + name] = var.get_len()
 
     def run(self):
         # generate code
