@@ -97,6 +97,7 @@ class AndroidStandaloneDevice(Device):
         code_object_defs = defaultdict(list)
         for codeobj in self.code_objects.values():
             for k, v in codeobj.nonconstant_values:
+                print k, v
                 if k=='t':
                     pass
                 elif v.im_class is ArrayVariable:
