@@ -8,6 +8,7 @@ from brian2.core.variables import *
 import os
 from collections import defaultdict
 
+set_device('cpp_standalone')
 ##### Define the model
 tau = 10*ms
 eqs = '''
