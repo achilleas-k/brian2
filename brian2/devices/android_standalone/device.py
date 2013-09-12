@@ -53,7 +53,7 @@ class AndroidStandaloneDevice(Device):
 
     def code_object_class(self, codeobj_class=None):
         if codeobj_class is not None:
-            raise ValueError("Cannot specify codeobj_class for C++ standalone device.")
+            raise ValueError("Cannot specify codeobj_class for Android standalone device.")
         return AndroidStandaloneCodeObject
 
     def code_object(self, name, abstract_code, namespace, variables, template_name,
