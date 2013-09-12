@@ -11,7 +11,7 @@ from brian2.units.fundamentalunits import check_units
 from brian2.units.allunits import second
 from brian2.core.preferences import brian_prefs
 from brian2.core.namespace import get_local_namespace
-from brian2.codegen.codeobject import global_codeobjects
+from brian2.devices.android_standalone.codeobject import global_codeobjects
 
 __all__ = ['Network']
 
@@ -430,7 +430,8 @@ class Network(Nameable):
 
         new_objects = global_codeobjects
         for obj in self_codeobjects:
-            global_codeobjects.remove(obj)
+            if obj in global_codeobjects:
+                global_codeobjects.remove(obj)
         print "New objects found in global list: \n\t%s" % (
             '\n\t'.join([obj._name for obj in new_objects])
         )
@@ -448,6 +449,13 @@ class Network(Nameable):
                         all_code_dict[k].append(v)
                     else:
                         all_code_dict[k] = [v]
+        for code_obj in new_objects:
+            code_dict = code_obj()
+            for k, v in code_dict.iteritems():
+                if k in all_code_dict:
+                    all_code_dict[k].append(v)
+                else:
+                    all_code_dict[k] = [v]
 
         for k, v in all_code_dict.items():
             java_code = java_code.replace(k, '\n'.join(v))
