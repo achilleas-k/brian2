@@ -11,7 +11,6 @@ from brian2.core.base import Updater
 from brian2.utils.logger import get_logger
 from .translation import translate
 from .runtime.targets import runtime_targets
-from brian2.codegen.languages import java_lang
 
 __all__ = ['CodeObject',
            'create_codeobject',
@@ -20,20 +19,6 @@ __all__ = ['CodeObject',
 
 logger = get_logger(__name__)
 
-global_codeobjects = []
-
-def get_default_codeobject_class():
-    '''
-    Returns the default `CodeObject` class from the preferences.
-    '''
-    codeobj_class = brian_prefs['codegen.target']
-    if isinstance(codeobj_class, str):
-        try:
-            codeobj_class = runtime_targets[codeobj_class]
-        except KeyError:
-            raise ValueError("Unknown code generation target: %s, should be "
-                             " one of %s" % (codeobj_class, runtime_targets.keys()))
-    return codeobj_class
 
 def prepare_namespace(namespace, variables):
     namespace = dict(namespace)
@@ -52,7 +37,7 @@ def create_codeobject(name, abstract_code, namespace, variables, template_name,
                       template_kwds=None):
     '''
     The following arguments keywords are passed to the template:
-
+    
     * code_lines coming from translation applied to abstract_code, a list
       of lines of code, given to the template as ``code_lines`` keyword.
     * ``template_kwds`` dict
@@ -93,28 +78,33 @@ def create_codeobject(name, abstract_code, namespace, variables, template_name,
                                   iterate_all=iterate_all)
     template_kwds.update(kwds)
     logger.debug(name + " snippet:\n" + str(snippet))
+    
     name = find_name(name)
+
     variables.update(indices)
+    
     code = template(snippet, variables=variables, codeobj_name=name, namespace=namespace, **template_kwds)
     logger.debug(name + " code:\n" + str(code))
+
     codeobj = codeobj_class(code, namespace, variables, name=name)
     codeobj.compile()
     return codeobj
 
+
 class CodeObject(Nameable):
     '''
     Executable code object.
-
+    
     The ``code`` can either be a string or a
     `brian2.codegen.templates.MultiTemplate`.
-
+    
     After initialisation, the code is compiled with the given namespace
     using ``code.compile(namespace)``.
-
+    
     Calling ``code(key1=val1, key2=val2)`` executes the code with the given
     variables inserted into the namespace.
     '''
-
+    
     #: The `Language` used by this `CodeObject`
     language = None
 
@@ -124,9 +114,8 @@ class CodeObject(Nameable):
         self.compile_methods = self.get_compile_methods(variables)
         self.namespace = namespace
         self.variables = variables
+
         self.variables_to_namespace()
-        # global_codeobjects: temporary - helps keep track of initialised COs
-        global_codeobjects.append(self)
 
     def variables_to_namespace(self):
         '''
@@ -161,19 +150,21 @@ class CodeObject(Nameable):
     def __call__(self, **kwds):
         self.update_namespace()
         self.namespace.update(**kwds)
+
         return self.run()
 
     def run(self):
         '''
         Runs the code in the namespace.
+        
         Returns
         -------
         return_value : dict
-        A dictionary with the keys corresponding to the `output_variables`
-        defined during the call of `Language.code_object`.
+            A dictionary with the keys corresponding to the `output_variables`
+            defined during the call of `Language.code_object`.
         '''
         raise NotImplementedError()
-
+    
     def get_updater(self):
         '''
         Returns a `CodeObjectUpdater` that updates this `CodeObject`
