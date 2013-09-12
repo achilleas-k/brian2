@@ -1,5 +1,6 @@
 import weakref
 import time
+import os
 from warnings import warn
 
 from brian2.utils.logger import get_logger
@@ -10,6 +11,7 @@ from brian2.units.fundamentalunits import check_units
 from brian2.units.allunits import second
 from brian2.core.preferences import brian_prefs
 from brian2.core.namespace import get_local_namespace
+from brian2.codegen.codeobject import global_codeobjects
 
 __all__ = ['Network']
 
@@ -400,8 +402,6 @@ class Network(Nameable):
             return # TODO: raise an error? warning?
 
         clock, curclocks = self._nextclocks()
-
-        import os
         # open templates
         # NOTE: temporary template path
         template_path = os.path.join(os.path.split(os.path.split(os.path.abspath(os.path.dirname(__file__)))[0])[0], 'android_template')
@@ -416,10 +416,27 @@ class Network(Nameable):
         java_template_file.close()
         rs_template_file.close()
 
+        # compile a list of unique code objects within self.objects
+        self_codeobjects = []
+        for obj in self.objects:
+            for cont_obj in obj.contained_objects:
+                self_codeobjects.append(cont_obj.codeobj)
+        print "Own objects: \n\t%s" % (
+            '\n\t'.join([obj._name for obj in self_codeobjects])
+        )
+        print "Global objects: \n\t%s" % (
+            '\n\t'.join([obj._name for obj in global_codeobjects])
+        )
+
+        new_objects = global_codeobjects
+        for obj in self_codeobjects:
+            global_codeobjects.remove(obj)
+        print "New objects found in global list: \n\t%s" % (
+            '\n\t'.join([obj._name for obj in new_objects])
+        )
         first_clock = self.objects[0].contained_objects[0].clock
         for obj in self.objects:
             for cont_obj in obj.contained_objects:
-                print cont_obj
                 if cont_obj.clock is not first_clock:
                     warn("Multiple clocks not supported yet.")
                 N = cont_obj.group.N
