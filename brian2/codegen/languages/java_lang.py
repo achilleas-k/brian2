@@ -7,12 +7,11 @@ import numpy
 from brian2.utils.stringtools import deindent, stripped_deindented_lines
 from brian2.codegen.functions.base import Function
 from brian2.utils.logger import get_logger
-
-from .base import Language
 from brian2.parsing.rendering import JavaNodeRenderer
-
 from brian2.core.preferences import brian_prefs, BrianPreference
 from brian2.core.variables import ArrayVariable
+
+from .base import Language
 
 logger = get_logger(__name__)
 
@@ -33,7 +32,7 @@ def java_data_type(dtype):
     '''
     if dtype == numpy.int:
         dtype = {'java': 'int', 'renderscript': 'int32_t', 'allocation': 'I32'}
-    if dtype == numpy.float32:
+    elif dtype == numpy.float32:
         dtype = {'java': 'float', 'renderscript': 'float', 'allocation': 'F32'}
     elif dtype == numpy.float64:
         # NOTE: Using float instead of double
@@ -92,7 +91,7 @@ class JavaLanguage(Language):
     def translate_statement(self, statement):
         var, op, expr = statement.var, statement.op, statement.expr
         if op == ':=':
-            decl = java_data_type(statement.dtype)['java'] + ' '
+            decl = self.java_data_type(statement.dtype)['java'] + ' '
             op = '='
             if statement.constant:
                 decl = 'const ' + decl
@@ -102,7 +101,8 @@ class JavaLanguage(Language):
                 self.translate_expression(expr) + ';'
 
     def translate_statement_sequence(self, statements, variables, namespace,
-                                        variable_indices, itertel_all):
+                                     variable_indices, iterate_all):
+        # TODO: Clean up! There must be a lot of lines in here that aren't used for the Android object (pointer lines? hash defines?)
         read, write = self.array_read_write(statements, variables)
         lines = []
         # read arrays
@@ -114,15 +114,15 @@ class JavaLanguage(Language):
             else:
                 line = ''
             line = line + self.java_data_type(var.dtype)['renderscript'] + ' ' + varname + ' = '
-            line = line + var.arrayname + '[' + index_var + '];'
+            line = line + '_ptr' + var.arrayname + '[' + index_var + '];' # keep ptr prefix for now
             lines.append(line)
         # simply declare variables that will be written but not read
         for varname in write:
             if varname not in read:
                 var = variables[varname]
                 line = self.java_data_type(var.dtype)['renderscript'] + ' ' + varname + ';'
-                lines.append(line)
-        # the actual code
+                lines_append = lines.append(line)
+            # the actual code
         lines.extend([self.translate_statement(stmt) for stmt in statements])
         # write arrays
         for varname in write:
@@ -140,6 +140,7 @@ class JavaLanguage(Language):
             if isinstance(var, ArrayVariable):
                 arrayname = var.arrayname
                 if not arrayname in arraynames:
+                    line = self.java_data_type(var.dtype)['renderscript'] + ' * ' + '_ptr' + arrayname + ' = ' + arrayname + ';'
                     lines.append(line)
                     arraynames.add(arrayname)
 
