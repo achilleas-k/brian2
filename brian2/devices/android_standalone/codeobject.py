@@ -9,6 +9,7 @@ from brian2.core.variables import ArrayVariable, Variable, Subexpression
 
 __all__ = ['AndroidStandaloneCodeObject']
 
+global_codeobjects = []
 
 class AndroidStandaloneCodeObject(CodeObject):
     '''
@@ -23,6 +24,8 @@ class AndroidStandaloneCodeObject(CodeObject):
     language = java_lang.JavaLanguage()
 
     def __init__(self, code, namespace, variables, name='codeobject*'):
+        # global_codeobjects: temporary - helps keep track of initialised COs
+        global_codeobjects.append(self)
         super(AndroidStandaloneCodeObject, self).__init__(code, namespace, variables, name=name)
 
     def variables_to_namespace(self):
@@ -51,6 +54,7 @@ class AndroidStandaloneCodeObject(CodeObject):
                 dtype_spec = java_lang.java_data_type(v.dtype)
                 # TODO: Perhaps it would be more convenient as a dictionary?
                 arrays.append((v.arrayname, dtype_spec, len(v.value)))
+
         self.arrays = arrays
         self.constants = constants
         self.functions = functions
@@ -73,25 +77,36 @@ class AndroidStandaloneCodeObject(CodeObject):
                     if not var.scalar:
                         self.namespace['_num' + name] = var.get_len()
 
+
     def run(self):
         # generate code
         # TODO: Tidy up this code
         code = {}
+        #print "\n\n"+self._name+" ============"
+        #print "\tconstants"
+        #for con in self.constants:
+        #    print "\t\t", con
+        #print "\tarrays"
+        #for arr in self.arrays:
+        #    print "\t\t", arr
+        #print "\tnamespace keys"
+        #for k in self.namespace.keys():
+        #    print "\t\t", k
         constants = self.constants
         arrays = self.arrays
         functions = self.functions
         if len(constants) > 0:
-            code['%RENDERSCRIPT CONSTANTS%'] = '// CONSTANT DECLARATIONS\n'
+            code['%RENDERSCRIPT CONSTANTS%'] = ''#'// CONSTANT DECLARATIONS\n'
             for dtype, k, v in constants:
                 code['%RENDERSCRIPT CONSTANTS%'] += 'const %s %s = %s;\n' % (dtype, k, v)
         # array definitions for Java
         if len(arrays) > 0:
-            code['%JAVA ARRAY DECLARATIONS%'] = '// JAVA ARRAY DEFINITIONS\n'
-            code['%JAVA ARRAY INITIALISATIONS%'] = '// JAVA ARRAY INITIALISATIONS\n'
-            code['%RENDERSCRIPT ARRAYS%'] = '// RENDERSCRIPT ARRAY DEFINITIONS\n'
-            code['%ALLOCATION DECLARATIONS%'] = '// ALLOCATION DEFINITIONS\n'
-            code['%ALLOCATION INITIALISATIONS%'] = '// ALLOCATION INITIALISATIONS\n'
-            code['%MEMORY BINDINGS%'] = '// MEMORY BINDINGS\n'
+            code['%JAVA ARRAY DECLARATIONS%']    = ''#'// JAVA ARRAY DEFINITIONS\n'
+            code['%JAVA ARRAY INITIALISATIONS%'] = ''#'// JAVA ARRAY INITIALISATIONS\n'
+            code['%RENDERSCRIPT ARRAYS%']        = ''#'// RENDERSCRIPT ARRAY DEFINITIONS\n'
+            code['%ALLOCATION DECLARATIONS%']    = ''#'// ALLOCATION DEFINITIONS\n'
+            code['%ALLOCATION INITIALISATIONS%'] = ''#'// ALLOCATION INITIALISATIONS\n'
+            code['%MEMORY BINDINGS%']            = ''#'// MEMORY BINDINGS\n'
             for varname, dtype_spec, N in arrays:
                 varname_alloc = varname+"_alloc"
                 javatype = dtype_spec['java']
