@@ -8,22 +8,25 @@ from brian2.core.variables import *
 import os
 from collections import defaultdict
 
+set_device('android_standalone')
 ##### Define the model
-tau = 10*ms
-eqs = '''
-dV/dt = -V/tau : volt (unless-refractory)
+tau_a = 10*ms
+tau_b = 20*ms
+eqs_a = '''
+dV/dt = -V/tau_a : volt (unless-refractory)
+'''
+eqs_b = '''
+dV/dt = -V/tau_b : volt (unless-refractory)
 '''
 threshold = 'V>-50*mV'
 reset = 'V=-60*mV'
 refractory = 5*ms
 N = 1000
 
-G = NeuronGroup(N, eqs, reset=reset, threshold=threshold,
-                refractory=refractory, name='gp', codeobj_class=AndroidStandaloneCodeObject)
-G2 = NeuronGroup(1, eqs, reset=reset, threshold=threshold,
-                 refractory=refractory, name='gp2', codeobj_class=AndroidStandaloneCodeObject)
+G = NeuronGroup(N, eqs_a, reset=reset, threshold=threshold, refractory=refractory, name='gp')
+G2 = NeuronGroup(10, eqs_b, reset=reset, threshold=threshold, refractory=refractory, name='gp2')
+G.V = -1*mV
 SM = SpikeMonitor(G)
-# Run the network for 0 seconds to generate the code
 net = Network(G, G2, SM)
 net.generate_code()
 import sys
