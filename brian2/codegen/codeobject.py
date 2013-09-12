@@ -20,6 +20,7 @@ __all__ = ['CodeObject',
 
 logger = get_logger(__name__)
 
+global_codeobjects = []
 
 def get_default_codeobject_class():
     '''
@@ -124,6 +125,8 @@ class CodeObject(Nameable):
         self.namespace = namespace
         self.variables = variables
         self.variables_to_namespace()
+        # global_codeobjects: temporary - helps keep track of initialised COs
+        global_codeobjects.append(self)
 
     def variables_to_namespace(self):
         '''
@@ -158,7 +161,6 @@ class CodeObject(Nameable):
     def __call__(self, **kwds):
         self.update_namespace()
         self.namespace.update(**kwds)
-
         return self.run()
 
     def run(self):
