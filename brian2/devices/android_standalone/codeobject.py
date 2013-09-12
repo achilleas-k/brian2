@@ -47,7 +47,7 @@ class AndroidStandaloneCodeObject(CodeObject):
             elif hasattr(v, '__call__'):
                 functions.append((k, v))
         for k, v in self.variables.items():
-            if isinstance (v, ArrayVariable):
+            if isinstance(v, ArrayVariable):
                 dtype_spec = java_lang.java_data_type(v.dtype)
                 # TODO: Perhaps it would be more convenient as a dictionary?
                 arrays.append((v.arrayname, dtype_spec, len(v.value)))
@@ -81,30 +81,30 @@ class AndroidStandaloneCodeObject(CodeObject):
         arrays = self.arrays
         functions = self.functions
         if len(constants) > 0:
-            code['constants'] = '// CONSTANT DECLARATIONS\n'
+            code['%RENDERSCRIPT CONSTANTS%'] = '// CONSTANT DECLARATIONS\n'
             for dtype, k, v in constants:
-                code['constants'] += 'const %s %s = %s;\n' % (dtype, k, v)
+                code['%RENDERSCRIPT CONSTANTS%'] += 'const %s %s = %s;\n' % (dtype, k, v)
         # array definitions for Java
         if len(arrays) > 0:
-            code['java_array_decl'] = '// JAVA ARRAY DEFINITIONS\n'
-            code['java_array_init'] = '// JAVA ARRAY INITIALISATIONS\n'
-            code['renderscript_array_decl'] = '// RENDERSCRIPT ARRAY DEFINITIONS\n'
-            code['allocation_decl'] = '// ALLOCATION DEFINITIONS\n'
-            code['allocation_init'] = '// ALLOCATION INITIALISATIONS\n'
-            code['memory_bindings'] = '// MEMORY BINDINGS\n'
+            code['%JAVA ARRAY DECLARATIONS%'] = '// JAVA ARRAY DEFINITIONS\n'
+            code['%JAVA ARRAY INITIALISATIONS%'] = '// JAVA ARRAY INITIALISATIONS\n'
+            code['%RENDERSCRIPT ARRAYS%'] = '// RENDERSCRIPT ARRAY DEFINITIONS\n'
+            code['%ALLOCATION DECLARATIONS%'] = '// ALLOCATION DEFINITIONS\n'
+            code['%ALLOCATION INITIALISATIONS%'] = '// ALLOCATION INITIALISATIONS\n'
+            code['%MEMORY BINDINGS%'] = '// MEMORY BINDINGS\n'
             for varname, dtype_spec, N in arrays:
                 varname_alloc = varname+"_alloc"
                 javatype = dtype_spec['java']
                 rstype = dtype_spec['renderscript']
                 alloctype = dtype_spec['allocation']
-                code['java_array_decl'] += '%s[] %s;\n' % (javatype, varname)
-                code['java_array_init'] += '%s = new %s[%s];\n' % (varname,
+                code['%JAVA ARRAY DECLARATIONS%'] += '%s[] %s;\n' % (javatype, varname)
+                code['%JAVA ARRAY INITIALISATIONS%'] += '%s = new %s[%s];\n' % (varname,
                                                                    javatype, N)
-                code['renderscript_array_decl'] += '%s *%s;\n' % (rstype, varname)
-                code['allocation_decl'] += 'Allocation %s;\n' % (varname_alloc)
-                code['allocation_init'] += \
+                code['%RENDERSCRIPT ARRAYS%'] += '%s *%s;\n' % (rstype, varname)
+                code['%ALLOCATION DECLARATIONS%'] += 'Allocation %s;\n' % (varname_alloc)
+                code['%ALLOCATION INITIALISATIONS%'] += \
                     '%s = Allocation.createSized(mRS, Element.%s(mRS), %s);\n' % (varname_alloc, alloctype, N)
-                code['memory_bindings'] += 'mScript.bind_%s(%s);\n' % (varname, varname_alloc)
+                code['%MEMORY BINDINGS%'] += 'mScript.bind_%s(%s);\n' % (varname, varname_alloc)
 
         # Allocations for input and output of renderscript kernel(s)
         #code += ('in_%s = Allocation.createSized('
@@ -113,6 +113,6 @@ class AndroidStandaloneCodeObject(CodeObject):
         #        'mRS, Element.I32(mRS), %s);\n' % (nrngrp.name, numneurons))
 
         if len(code) > 0:
-            code['state_updaters'] = '// STATE UPDATERS FOR %s\n' % (self.name)
-            code['state_updaters'] += self.code.main+'\n'
+            code['%STATE UPDATERS%'] = '// STATE UPDATERS FOR %s\n' % (self.name)
+            code['%STATE UPDATERS%'] += self.code.main+'\n'
         return code

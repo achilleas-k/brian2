@@ -435,6 +435,7 @@ class Network(Nameable):
             '\n\t'.join([obj._name for obj in new_objects])
         )
         first_clock = self.objects[0].contained_objects[0].clock
+        all_code_dict = {}
         for obj in self.objects:
             for cont_obj in obj.contained_objects:
                 if cont_obj.clock is not first_clock:
@@ -442,36 +443,15 @@ class Network(Nameable):
                 N = cont_obj.group.N
                 dt = cont_obj.clock.dt_
                 code_dict = cont_obj.codeobj()
-                # FILL IN JAVA TEMPLATE
-                if 'java_array_decl' in code_dict:
-                    java_code = java_code.replace('%JAVA ARRAY DECLARATIONS%',
-                                                  code_dict['java_array_decl'])
-                if 'java_array_init' in code_dict:
-                    java_code = java_code.replace('%JAVA ARRAY INITIALISATIONS%',
-                                                  code_dict['java_array_init'])
-                if 'allocation_decl' in code_dict:
-                    java_code = java_code.replace('%ALLOCATION DECLARATIONS%',
-                                                  code_dict['allocation_decl'])
-                if 'allocation_init' in code_dict:
-                    java_code = java_code.replace('%ALLOCATION INITIALISATIONS%',
-                                                  code_dict['allocation_init'])
-                if 'memory_bindings' in code_dict:
-                    java_code = java_code.replace('%MEMORY BINDINGS%',
-                                              code_dict['memory_bindings'])
-                java_code = java_code.replace('%N%', repr(N))
-                java_code = java_code.replace('%dt%', repr(dt)+'f')
+                for k, v in code_dict.iteritems():
+                    if k in all_code_dict:
+                        all_code_dict[k].append(v)
+                    else:
+                        all_code_dict[k] = [v]
 
-                # FILL IN RENDERSCRIPT TEMPLATE
-                if 'renderscript_array_decl' in code_dict:
-                    rs_code = rs_code.replace('%RENDERSCRIPT ARRAYS%',
-                                              code_dict['renderscript_array_decl'])
-                if 'constants' in code_dict:
-                    rs_code = rs_code.replace('%RENDERSCRIPT CONSTANTS%',
-                                              code_dict['constants'])
-                if 'state_updaters' in code_dict:
-                    rs_code = rs_code.replace('%STATE UPDATERS%',
-                                              code_dict['state_updaters']+"\n\n%STATE UPDATERS%\n")
-        rs_code = rs_code.replace('%STATE UPDATERS%', '')
+        for k, v in all_code_dict.items():
+            java_code = java_code.replace(k, '\n'.join(v))
+            rs_code = rs_code.replace(k, '\n'.join(v))
 
         if not os.path.exists("./output"):
             os.makedirs("./output")
