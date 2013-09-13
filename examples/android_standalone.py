@@ -27,7 +27,7 @@ G = NeuronGroup(N, eqs_a, reset=reset, threshold=threshold, refractory=refractor
 G2 = NeuronGroup(10, eqs_b, reset=reset, threshold=threshold, refractory=refractory, name='gp2')
 G.V = -1*mV
 SM = SpikeMonitor(G)
-net = Network(G, G2, SM)
+net = Network(G)
 net.generate_code()
 import sys
 sys.exit(0)
