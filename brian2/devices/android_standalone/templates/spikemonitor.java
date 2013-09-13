@@ -2,6 +2,7 @@
 
     // USE_SPECIFIERS { _t, _i, t, _spikes, _count }
 
+int run_{{codeobj_name}}() {
     if (_num_spikes > 0)
     {
         // Copy the values across
@@ -13,6 +14,7 @@
             _count[_neuron_idx]++;
         }
     }
+}
 {% endmacro %}
 
 {% macro support_code() %}
