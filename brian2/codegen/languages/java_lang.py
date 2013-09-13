@@ -57,7 +57,31 @@ def java_data_type(dtype):
 brian_prefs.register_preferences(
     'codegen.languages.java',
     'Java codegen preferences',
-    )
+    restrict_keyword = BrianPreference(
+        default='__restrict__',
+        docs='''
+        The keyword used for the given compiler to declare pointers as restricted.
+
+        This keyword is different on different compilers, the default is for gcc.
+        ''',
+        ),
+    flush_denormals = BrianPreference(
+        default=False,
+        docs='''
+        Adds code to flush denormals to zero.
+
+        The code is gcc and architecture specific, so may not compile on all
+        platforms. The code, for reference is::
+
+            #define CSR_FLUSH_TO_ZERO         (1 << 15)
+            unsigned csr = __builtin_ia32_stmxcsr();
+            csr |= CSR_FLUSH_TO_ZERO;
+            __builtin_ia32_ldmxcsr(csr);
+
+        Found at `<http://stackoverflow.com/questions/2487653/avoiding-denormal-values-in-c>`_.
+        ''',
+        ),
+     )
 
 
 class JavaLanguage(Language):
@@ -83,6 +107,8 @@ class JavaLanguage(Language):
     language_id = 'java'
 
     def __init__(self, java_data_type=java_data_type):
+        self.restrict = brian_prefs['codegen.languages.java.restrict_keyword']
+        self.flush_denormals = brian_prefs['codegen.languages.java.flush_denormals']
         self.java_data_type = java_data_type
 
     def translate_expression(self, expr):
@@ -121,14 +147,14 @@ class JavaLanguage(Language):
             if varname not in read:
                 var = variables[varname]
                 line = self.java_data_type(var.dtype)['renderscript'] + ' ' + varname + ';'
-                lines_append = lines.append(line)
-            # the actual code
+                lines.append(line)
+        # the actual code
         lines.extend([self.translate_statement(stmt) for stmt in statements])
         # write arrays
         for varname in write:
             index_var = variable_indices[varname]
             var = variables[varname]
-            line = var.arrayname + '[' + index_var + '] = ' + varname + ';'
+            line = '_ptr' + var.arrayname + '[' + index_var + '] = ' + varname + ';'
             lines.append(line)
         code = '\n'.join(lines)
         lines = []
@@ -140,18 +166,28 @@ class JavaLanguage(Language):
             if isinstance(var, ArrayVariable):
                 arrayname = var.arrayname
                 if not arrayname in arraynames:
-                    line = self.java_data_type(var.dtype)['renderscript'] + ' * ' + '_ptr' + arrayname + ' = ' + arrayname + ';'
+                    line = self.java_data_type(var.dtype)['renderscript'] + ' * ' + self.restrict + '_ptr' + arrayname + ' = ' + arrayname + ';'
                     lines.append(line)
                     arraynames.add(arrayname)
+        pointers = '\n'.join(lines)
+        print "\n----\nThe list of arrays defined in java_lang for : "
+        for an in arraynames:
+            print an
+        print "\nAccompanying code:"
+        print code
 
+        print "\nPointers:"
+        print pointers
         # set up the functions
         user_functions = []
         support_code = ''
+        hash_defines = ''
         #for varname, variable in namespace.items():
         #    if isinstance(variable, Function):
         #        user_functions.append(varname)
         #        speccode = variable.code(self, varname)
         #        support_code += '\n' + deindent(speccode['support_code'])
+        #        hash_defines += deindent(speccode['hashdefine_code'])
         #        # add the Python function with a leading '_python', if it
         #        # exists. This allows the function to make use of the Python
         #        # function via weave if necessary (e.g. in the case of randn)
@@ -169,7 +205,19 @@ class JavaLanguage(Language):
 
         # return
         return (stripped_deindented_lines(code),
-                {
-                    'support_code_lines': stripped_deindented_lines(support_code),
+                {'pointers_lines': stripped_deindented_lines(pointers),
+                 'support_code_lines': stripped_deindented_lines(support_code),
+                 'hashdefine_lines': stripped_deindented_lines(hash_defines),
+                 'denormals_code_lines': stripped_deindented_lines(self.denormals_to_zero_code()),
                  })
 
+    def denormals_to_zero_code(self):
+        if self.flush_denormals:
+            return '''
+            #define CSR_FLUSH_TO_ZERO         (1 << 15)
+            unsigned csr = __builtin_ia32_stmxcsr();
+            csr |= CSR_FLUSH_TO_ZERO;
+            __builtin_ia32_ldmxcsr(csr);
+            '''
+        else:
+            return ''
