@@ -116,6 +116,13 @@ class AndroidStandaloneCodeObject(CodeObject):
                 code['%JAVA ARRAY DECLARATIONS%'] += '%s[] %s;\n' % (javatype, varname)
                 code['%JAVA ARRAY INITIALISATIONS%'] += '%s = new %s[%s];\n' % (varname,
                                                                    javatype, N)
+                # TODO: fix this (initialises everything to 0)
+                if javatype == 'boolean':
+                    defval = 'false'
+                else:
+                    defval = '0'
+                code['%JAVA ARRAY INITIALISATIONS%'] += 'Arrays.fill(%s, %s);\n' % (varname, defval)
+
                 code['%RENDERSCRIPT ARRAYS%'] += '%s *%s;\n' % (rstype, varname)
                 code['%ALLOCATION DECLARATIONS%'] += 'Allocation %s;\n' % (varname_alloc)
                 code['%ALLOCATION INITIALISATIONS%'] += \
