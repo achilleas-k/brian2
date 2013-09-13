@@ -140,7 +140,7 @@ class JavaLanguage(Language):
             else:
                 line = ''
             line = line + self.java_data_type(var.dtype)['renderscript'] + ' ' + varname + ' = '
-            line = line + '_ptr' + var.arrayname + '[' + index_var + '];' # keep ptr prefix for now
+            line = line + '' + var.arrayname + '[' + index_var + '];'
             lines.append(line)
         # simply declare variables that will be written but not read
         for varname in write:
@@ -154,7 +154,7 @@ class JavaLanguage(Language):
         for varname in write:
             index_var = variable_indices[varname]
             var = variables[varname]
-            line = '_ptr' + var.arrayname + '[' + index_var + '] = ' + varname + ';'
+            line = '' + var.arrayname + '[' + index_var + '] = ' + varname + ';'
             lines.append(line)
         code = '\n'.join(lines)
         lines = []

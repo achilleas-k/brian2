@@ -100,6 +100,7 @@ class AndroidStandaloneCodeObject(CodeObject):
             for dtype, k, v in constants:
                 code['%RENDERSCRIPT CONSTANTS%'] += 'const %s %s = %s;\n' % (dtype, k, v)
         # array definitions for Java
+        group_N = 0
         if len(arrays) > 0:
             code['%JAVA ARRAY DECLARATIONS%']    = ''#'// JAVA ARRAY DEFINITIONS\n'
             code['%JAVA ARRAY INITIALISATIONS%'] = ''#'// JAVA ARRAY INITIALISATIONS\n'
@@ -120,6 +121,37 @@ class AndroidStandaloneCodeObject(CodeObject):
                 code['%ALLOCATION INITIALISATIONS%'] += \
                     '%s = Allocation.createSized(mRS, Element.%s(mRS), %s);\n' % (varname_alloc, alloctype, N)
                 code['%MEMORY BINDINGS%'] += 'mScript.bind_%s(%s);\n' % (varname, varname_alloc)
+                group_N = N  # TODO: get this elsewhere
+            # Code for indexer
+            group_name = self.name.split('_')[0]
+            idxname = group_name+'_idx'
+            outname = group_name+'_out'
+            idxname_alloc = idxname+'_alloc'
+            outname_alloc = outname+'_alloc'
+            code['%ALLOCATION DECLARATIONS%'] += 'Allocation %s;\n' % (idxname_alloc)
+            code['%ALLOCATION DECLARATIONS%'] += 'Allocation %s;\n' % (outname_alloc)
+            code['%ALLOCATION INITIALISATIONS%'] += \
+                '%s = Allocation.createSized(mRS, Element.I32(mRS), %s);\n' % (
+                    idxname_alloc, N
+                )
+            code['%ALLOCATION INITIALISATIONS%'] += \
+                '%s = Allocation.createSized(mRS, Element.I32(mRS), %s);\n' % (
+                    outname_alloc, N
+                )
+            code['%JAVA ARRAY DECLARATIONS%'] += 'int[] %s;\n' % (idxname)
+            code['%JAVA ARRAY DECLARATIONS%'] += 'int[] %s;\n' % (outname)
+            code['%JAVA ARRAY INITIALISATIONS%'] += '%s = new int[%s]\n' % (
+                idxname, group_N
+            )
+            code['%JAVA ARRAY INITIALISATIONS%'] += '%s = new int[%s]\n' % (
+                outname, group_N
+            )
+            code['%JAVA IDX INITIALISATIONS%'] = (
+                'for (int idx=0; idx<%s; idx++)\n%s[idx] = idx;' % (
+                    group_N, idxname
+                )
+
+            )
 
         # Allocations for input and output of renderscript kernel(s)
         #code += ('in_%s = Allocation.createSized('

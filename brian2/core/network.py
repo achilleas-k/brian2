@@ -18,6 +18,8 @@ __all__ = ['Network']
 logger = get_logger(__name__)
 
 
+
+
 class Network(Nameable):
     '''
     Network(*objs, name='network*')
@@ -436,26 +438,35 @@ class Network(Nameable):
             '\n\t'.join([obj._name for obj in new_objects])
         )
         first_clock = self.objects[0].contained_objects[0].clock
+        simulation_dt = float(first_clock.dt)
         all_code_dict = {}
+        idx_arrays = {}
         for obj in self.objects:
             for cont_obj in obj.contained_objects:
                 if cont_obj.clock is not first_clock:
                     warn("Multiple clocks not supported yet.")
-                N = cont_obj.group.N
+                group_num_idx = cont_obj.group.N
+                group_name = cont_obj.group.name
+                if group_name not in idx_arrays:
+                    idx_arrays[group_name] = group_num_idx
                 dt = cont_obj.clock.dt_
                 code_dict = cont_obj.codeobj()
                 for k, v in code_dict.iteritems():
                     if k in all_code_dict:
-                        all_code_dict[k].append(v)
+                        if v not in all_code_dict[k]:
+                            all_code_dict[k].append(v)
                     else:
                         all_code_dict[k] = [v]
-        for code_obj in new_objects:
-            code_dict = code_obj()
-            for k, v in code_dict.iteritems():
-                if k in all_code_dict:
-                    all_code_dict[k].append(v)
-                else:
-                    all_code_dict[k] = [v]
+
+        # objects not in self.objects
+        #for code_obj in new_objects:
+        #    code_dict = code_obj()
+        #    for k, v in code_dict.iteritems():
+        #        if k in all_code_dict:
+        #            if v not in all_code_dict[k]:
+        #                all_code_dict[k].append(v)
+        #        else:
+        #            all_code_dict[k] = [v]
 
         for k, v in all_code_dict.items():
             java_code = java_code.replace(k, '\n'.join(v))
