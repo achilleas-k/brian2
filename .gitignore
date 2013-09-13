@@ -31,3 +31,6 @@ nosetests.xml
 
 tags
 
+# ignored directory
+/ignoreme
+
