@@ -8,7 +8,7 @@ from brian2.core.variables import *
 import os
 from collections import defaultdict
 
-set_device('android_standalone')
+set_device('android')
 ##### Define the model
 tau_a = 10*ms
 tau_b = 20*ms
