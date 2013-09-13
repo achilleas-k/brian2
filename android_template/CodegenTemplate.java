@@ -23,7 +23,7 @@ public class CodegenTemplate { //extends AsyncTask<Void, String, Void> {
     Context bdContext;
     float _duration;
     float t;
-    float dt;
+    %JAVA TIMESTEP%
     float progress;
 
     long runtimeDuration = -1;
@@ -80,7 +80,6 @@ public class CodegenTemplate { //extends AsyncTask<Void, String, Void> {
 
     public void setup() {
         _duration = 1;
-        %JAVA TIMESTEP%
         mRS = RenderScript.create(bdContext);
         mScript = new ScriptC_stateupdate(mRS);
 
@@ -161,7 +160,7 @@ public class CodegenTemplate { //extends AsyncTask<Void, String, Void> {
         long sim_start = System.currentTimeMillis();
         for (t=0; t<_duration; t+=dt) {
             mScript.set_t(t);
-            mScript.forEach_update(idx_allocation, out);
+            %KERNEL CALLS%
             mRS.finish();
         }
         runtimeDuration = System.currentTimeMillis()-sim_start;

@@ -2,6 +2,7 @@
 #pragma rs java_package_name(org.briansimulator.briandroidtemplate)
 
 float t;
+%RENDERSCRIPT TIMESTEP%
 
 // START CUSTOM FUNCTIONS //
 
@@ -78,7 +79,7 @@ static double clip_rs(double value, double a_min, double a_max) {
 %RENDERSCRIPT CONSTANTS%
 
 %STATE UPDATERS%
-}
+
 
 
 

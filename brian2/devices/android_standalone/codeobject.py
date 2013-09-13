@@ -101,7 +101,7 @@ class AndroidStandaloneCodeObject(CodeObject):
                 code['%RENDERSCRIPT CONSTANTS%'] += 'const %s %s = %s;\n' % (dtype, k, v)
         # array definitions for Java
         group_N = 0
-        if len(arrays) > 0:
+        if len(arrays) > 0 and 'stateupdater' in self.name:
             code['%JAVA ARRAY DECLARATIONS%']    = ''#'// JAVA ARRAY DEFINITIONS\n'
             code['%JAVA ARRAY INITIALISATIONS%'] = ''#'// JAVA ARRAY INITIALISATIONS\n'
             code['%RENDERSCRIPT ARRAYS%']        = ''#'// RENDERSCRIPT ARRAY DEFINITIONS\n'
@@ -140,26 +140,24 @@ class AndroidStandaloneCodeObject(CodeObject):
                 )
             code['%JAVA ARRAY DECLARATIONS%'] += 'int[] %s;\n' % (idxname)
             code['%JAVA ARRAY DECLARATIONS%'] += 'int[] %s;\n' % (outname)
-            code['%JAVA ARRAY INITIALISATIONS%'] += '%s = new int[%s]\n' % (
+            code['%JAVA ARRAY INITIALISATIONS%'] += '%s = new int[%s];\n' % (
                 idxname, group_N
             )
-            code['%JAVA ARRAY INITIALISATIONS%'] += '%s = new int[%s]\n' % (
+            code['%JAVA ARRAY INITIALISATIONS%'] += '%s = new int[%s];\n' % (
                 outname, group_N
             )
             code['%JAVA IDX INITIALISATIONS%'] = (
-                'for (int idx=0; idx<%s; idx++)\n%s[idx] = idx;' % (
+                'for (int idx=0; idx<%s; idx++)\n\t%s[idx] = idx;\n' % (
                     group_N, idxname
                 )
-
+            )
+            code['%KERNEL CALLS%'] = (
+                'mScript.forEach_update_%s(%s, %s);' % (
+                    self.name, idxname_alloc, outname_alloc
+                )
             )
 
-        # Allocations for input and output of renderscript kernel(s)
-        #code += ('in_%s = Allocation.createSized('
-        #        'mRS, Element.I32(mRS), %s);\n' % (nrngrp.name, numneurons))
-        #code += ('out_%s = Allocation.createSized('
-        #        'mRS, Element.I32(mRS), %s);\n' % (nrngrp.name, numneurons))
-
-        if len(code) > 0:
+        if len(code) > 0 and 'stateupdater' in self.name:
             code['%STATE UPDATERS%'] = '// STATE UPDATERS FOR %s\n' % (self.name)
             code['%STATE UPDATERS%'] += self.code.main+'\n'
         return code

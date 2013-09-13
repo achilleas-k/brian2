@@ -457,7 +457,8 @@ class Network(Nameable):
                             all_code_dict[k].append(v)
                     else:
                         all_code_dict[k] = [v]
-
+        all_code_dict['%JAVA TIMESTEP%'] = ['float dt = %sf;' % (simulation_dt)]
+        all_code_dict['%RENDERSCRIPT TIMESTEP%'] = ['float dt = %sf;' % (simulation_dt)]
         # objects not in self.objects
         #for code_obj in new_objects:
         #    code_dict = code_obj()
@@ -480,9 +481,6 @@ class Network(Nameable):
         rs_output_file.write(rs_code)
         java_output_file.close()
         rs_output_file.close()
-
-
-
 
     def _writetemplates(code):
         '''
