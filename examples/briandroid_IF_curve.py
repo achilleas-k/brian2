@@ -9,6 +9,7 @@ from pylab import *
 from brian2 import *
 from brian2.codegen.languages import *
 
+set_device('android')
 N = 1000
 tau = 10 * ms
 eqs = '''
@@ -17,8 +18,7 @@ v0 : volt
 '''
 group = NeuronGroup(N, model=eqs, threshold='v>10 * mV',
                     reset='v = 0 * mV', refractory=5*ms,
-                    name="lifnrngrp",
-                    codeobj_class=JavaCodeObject)
+                    name="lifnrngrp",)
 group.v = 0 * mV
 group.v0 = linspace(0 * mV, 20 * mV, N)
 monitor = SpikeMonitor(group)
