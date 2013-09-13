@@ -148,10 +148,10 @@ class AndroidStandaloneDevice(Device):
         copy_directory(brianlib_dir, 'output/brianlib')
 
 
-android_standalone_device = AndroidStandaloneDevice()
+android_device = AndroidStandaloneDevice()
 
-all_devices['android_standalone'] = android_standalone_device
+all_devices['android'] = android_device
 
 def build(net):
-    android_standalone_device.build(net)
+    android_device.build(net)
     
