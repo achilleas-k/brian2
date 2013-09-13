@@ -135,10 +135,12 @@ class JavaLanguage(Language):
         for varname in read:
             index_var = variable_indices[varname]
             var = variables[varname]
-            if varname not in write:
-                line = 'const '
-            else:
-                line = ''
+            # TODO: Check if this was really the problem with sigsegv
+            #if varname not in write:
+            #    line = 'const '
+            #else:
+            #    line = ''
+            line = ''
             line = line + self.java_data_type(var.dtype)['renderscript'] + ' ' + varname + ' = '
             line = line + '' + var.arrayname + '[' + index_var + '];'
             lines.append(line)

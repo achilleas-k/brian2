@@ -154,8 +154,11 @@ class AndroidStandaloneCodeObject(CodeObject):
                 outname, group_N
             )
             code['%JAVA IDX INITIALISATIONS%'] = (
-                'for (int idx=0; idx<%s; idx++)\n\t%s[idx] = idx;\n' % (
-                    group_N, idxname
+                'for (int idx=0; idx<%(N)s; idx++){\n'
+                '%(idxname)s[idx] = idx;\n'
+                '}\n'
+                '%(allocname)s.copyFrom(%(idxname)s);\n' % (
+                    {'N': group_N, 'idxname': idxname, 'allocname': idxname_alloc}
                 )
             )
             code['%KERNEL CALLS%'] = (

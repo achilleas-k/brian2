@@ -71,6 +71,7 @@ class AndroidStandaloneDevice(Device):
         # Extract all the CodeObjects
         # Note that since we ran the Network object, these CodeObjects will be sorted into the right
         # running order, assuming that there is only one clock
+        print "building"
         updaters = []
         for obj in net.objects:
             for updater in obj.updaters:

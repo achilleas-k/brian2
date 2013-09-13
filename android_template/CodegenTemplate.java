@@ -17,14 +17,14 @@ import android.util.Log;
 /**
  * The base code generation template for BrianDROID simulations
  */
-public class CodegenTemplate { //extends AsyncTask<Void, String, Void> {
+public class CodegenTemplate extends AsyncTask<Void, String, Void> {
 
     private final static String LOGID = "org.briansimulator.briandroidtemplate.CodegenTemplate";
     Context bdContext;
     float _duration;
     float t;
     %JAVA TIMESTEP%
-    float progress;
+    int simstate = 0;
 
     long runtimeDuration = -1;
 
@@ -47,11 +47,6 @@ public class CodegenTemplate { //extends AsyncTask<Void, String, Void> {
         return _duration;
     }
 
-    public float getProgress() {
-        return progress;
-    }
-
-
     public String getStatusText() {
         return simulationStatus;
     }
@@ -62,6 +57,10 @@ public class CodegenTemplate { //extends AsyncTask<Void, String, Void> {
 
     public String getRuntimeDuration() {
         return ""+runtimeDuration;
+    }
+
+    public int getSimState() {
+        return simstate;
     }
 
     protected void setStatusText(String statusText) {
@@ -153,18 +152,32 @@ public class CodegenTemplate { //extends AsyncTask<Void, String, Void> {
         }
     }
 
+    @Override
+    protected void onProgressUpdate(String... progress) {
+        setStatusText("Running simulation: "+progress[0]+"/"+_duration);
+    }
+
+    @Override
+    protected Void doInBackground(Void... ign) {
+        run();
+        return null;
+    }
+
     //*********** MAIN LOOP *************
     public void run() {
         Log.d(LOGID, "Starting run code ...");
+        simstate = 1;
         %JAVA IDX INITIALISATIONS%
         long sim_start = System.currentTimeMillis();
         for (t=0; t<_duration; t+=dt) {
             mScript.set_t(t);
             %KERNEL CALLS%
+            publishProgress(""+t);
             mRS.finish();
         }
         runtimeDuration = System.currentTimeMillis()-sim_start;
         Log.d(LOGID, "DONE!");
+        simstate = 2;
 
     }
 
