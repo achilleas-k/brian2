@@ -1,6 +1,6 @@
 from numpy import *
 from brian2 import *
-from brian2.devices.android_standalone import android_device
+from brian2.devices.android_standalone import *
 
 set_device('android')
 ##### Define the model
@@ -22,5 +22,7 @@ G2 = NeuronGroup(10, eqs_b, reset=reset, threshold=threshold, refractory=refract
 G.V = -1*mV
 SM = SpikeMonitor(G)
 net = Network(G, G2)
-net.generate_code()
+#net.generate_code()
+net.run(0*second)
+build(net)
 
