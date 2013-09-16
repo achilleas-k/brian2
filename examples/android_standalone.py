@@ -3,7 +3,7 @@ from brian2 import *
 from brian2.utils.stringtools import *
 from brian2.codegen.languages.java_lang import *
 from brian2.devices.android_standalone import *
-from brian2.devices.android_standalone.codeobject import AndroidStandaloneCodeObject
+from brian2.devices.android_standalone.codeobject import AndroidCodeObject
 from brian2.core.variables import *
 import os
 from collections import defaultdict
@@ -90,14 +90,14 @@ if not os.path.exists('output'):
 # The code_objects are passed in the right order to run them because they were
 # sorted by the Network object. To support multiple clocks we'll need to be
 # smarter about that.
-main_tmp = AndroidStandaloneCodeObject.templater.main(None,
+main_tmp = AndroidCodeObject.templater.main(None,
                                                   code_objects=code_objects,
                                                   num_steps=1000,
                                                   dt=float(defaultclock.dt),
                                                   )
 open('output/main.java', 'w').write(main_tmp)
 
-arr_tmp = AndroidStandaloneCodeObject.templater.arrays(None, array_specs=arrays.values())
+arr_tmp = AndroidCodeObject.templater.arrays(None, array_specs=arrays.values())
 open('output/arrays.java', 'w').write(arr_tmp.java_file)
 
 for codeobj in code_objects:

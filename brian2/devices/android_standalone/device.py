@@ -14,7 +14,7 @@ from brian2.memory.dynamicarray import DynamicArray, DynamicArray1D
 from brian2.codegen.languages.java_lang import java_data_type
 from brian2.codegen.codeobject import CodeObjectUpdater
 
-from .codeobject import AndroidStandaloneCodeObject
+from .codeobject import AndroidCodeObject
 
 __all__ = ['build']
 
@@ -26,7 +26,7 @@ def freeze(code, ns):
     return code
 
 
-class AndroidStandaloneDevice(Device):
+class AndroidDevice(Device):
     '''
     '''
     def __init__(self):
@@ -53,13 +53,13 @@ class AndroidStandaloneDevice(Device):
 
     def code_object_class(self, codeobj_class=None):
         if codeobj_class is not None:
-            raise ValueError("Cannot specify codeobj_class for Android standalone device.")
-        return AndroidStandaloneCodeObject
+            raise ValueError("Cannot specify codeobj_class for Android device.")
+        return AndroidCodeObject
 
     def code_object(self, name, abstract_code, namespace, variables, template_name,
                     indices, variable_indices, codeobj_class=None,
                     template_kwds=None):
-        codeobj = super(AndroidStandaloneDevice, self).code_object(name, abstract_code, namespace, variables,
+        codeobj = super(AndroidDevice, self).code_object(name, abstract_code, namespace, variables,
                                                                template_name, indices, variable_indices,
                                                                codeobj_class=codeobj_class,
                                                                template_kwds=template_kwds,
@@ -90,7 +90,7 @@ class AndroidStandaloneDevice(Device):
         # Write the arrays            
         array_specs = [(k, java_data_type(v.dtype), len(v)) for k, v in self.arrays.iteritems()]
         dynamic_array_specs = [(k, java_data_type(v.dtype)) for k, v in self.dynamic_arrays.iteritems()]
-        arr_tmp = AndroidStandaloneCodeObject.templater.arrays(None, array_specs=array_specs,
+        arr_tmp = AndroidCodeObject.templater.arrays(None, array_specs=array_specs,
                                                            dynamic_array_specs=dynamic_array_specs)
         open('output/arrays.java', 'w').write(arr_tmp.java_file)
 
@@ -130,12 +130,12 @@ class AndroidStandaloneDevice(Device):
                 
                 run_lines.append('_run_%s(t);' % codeobj.name)
             else:
-                raise NotImplementedError("Android standalone device has not implemented "+cls.__name__)
+                raise NotImplementedError("Android device has not implemented "+cls.__name__)
         
         # The code_objects are passed in the right order to run them because they were
         # sorted by the Network object. To support multiple clocks we'll need to be
         # smarter about that.
-        main_tmp = AndroidStandaloneCodeObject.templater.main(None,
+        main_tmp = AndroidCodeObject.templater.main(None,
                                                           run_lines=run_lines,
                                                           code_objects=self.code_objects.values(),
                                                           num_steps=1000,
@@ -144,12 +144,12 @@ class AndroidStandaloneDevice(Device):
         open('output/main.java', 'w').write(main_tmp)
 
         # Copy the brianlibdirectory
-        brianlib_dir = os.path.join(os.path.split(inspect.getsourcefile(AndroidStandaloneCodeObject))[0],
+        brianlib_dir = os.path.join(os.path.split(inspect.getsourcefile(AndroidCodeObject))[0],
                                     'brianlib')
         copy_directory(brianlib_dir, 'output/brianlib')
 
 
-android_device = AndroidStandaloneDevice()
+android_device = AndroidDevice()
 
 all_devices['android'] = android_device
 

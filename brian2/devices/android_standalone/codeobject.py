@@ -7,11 +7,11 @@ from brian2.codegen.languages import java_lang
 from brian2.core.variables import ArrayVariable
 from brian2.core.variables import ArrayVariable, Variable, Subexpression
 
-__all__ = ['AndroidStandaloneCodeObject']
+__all__ = ['AndroidCodeObject']
 
 global_codeobjects = []
 
-class AndroidStandaloneCodeObject(CodeObject):
+class AndroidCodeObject(CodeObject):
     '''
     Java code object
 
@@ -26,7 +26,7 @@ class AndroidStandaloneCodeObject(CodeObject):
     def __init__(self, code, namespace, variables, name='codeobject*'):
         # global_codeobjects: temporary - helps keep track of initialised COs
         global_codeobjects.append(self)
-        super(AndroidStandaloneCodeObject, self).__init__(code, namespace, variables, name=name)
+        super(AndroidCodeObject, self).__init__(code, namespace, variables, name=name)
 
     def variables_to_namespace(self):
         # Variables can refer to values that are either constant (e.g. dt)
