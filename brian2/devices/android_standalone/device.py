@@ -33,7 +33,7 @@ class AndroidDevice(Device):
         self.arrays = {}
         self.dynamic_arrays = {}
         self.code_objects = {}
-        
+
     def array(self, owner, name, size, unit, dtype=None):
         if dtype is None:
             dtype = brian_prefs['core.default_scalar_dtype']
@@ -47,7 +47,7 @@ class AndroidDevice(Device):
         arr = DynamicArray1D(size, dtype=dtype)
         self.dynamic_arrays['_dynamic_array_%s_%s' % (owner.name, name)] = arr
         return arr
-    
+
     def dynamic_array(self):
         raise NotImplentedError
 
@@ -76,7 +76,7 @@ class AndroidDevice(Device):
         for obj in net.objects:
             for updater in obj.updaters:
                 updaters.append(updater)
-        
+
         # Extract the arrays information
         vars = {}
         for obj in net.objects:
@@ -87,7 +87,7 @@ class AndroidDevice(Device):
         if not os.path.exists('output'):
             os.mkdir('output')
 
-        # Write the arrays            
+        # Write the arrays
         array_specs = [(k, java_data_type(v.dtype), len(v)) for k, v in self.arrays.iteritems()]
         dynamic_array_specs = [(k, java_data_type(v.dtype)) for k, v in self.dynamic_arrays.iteritems()]
         arr_tmp = AndroidCodeObject.templater.arrays(None, array_specs=array_specs,
@@ -112,7 +112,7 @@ class AndroidDevice(Device):
                                 '&(_dynamic{arrayname}[0]);').format(java_type=java_type,
                                                                       arrayname=v.arrayname)
                         code_object_defs[codeobj.name].append(code)
-                    
+
         # Generate the updaters
         run_lines = []
         for updater in updaters:
@@ -124,14 +124,14 @@ class AndroidDevice(Device):
                 code = freeze(codeobj.code.cpp_file, ns)
                 code = code.replace('%CONSTANTS%', '\n'.join(code_object_defs[codeobj.name]))
                 code = '#include "arrays.h"\n'+code
-                
+
                 open('output/'+codeobj.name+'.cpp', 'w').write(code)
                 open('output/'+codeobj.name+'.h', 'w').write(codeobj.code.h_file)
-                
+
                 run_lines.append('_run_%s(t);' % codeobj.name)
             else:
                 raise NotImplementedError("Android device has not implemented "+cls.__name__)
-        
+
         # The code_objects are passed in the right order to run them because they were
         # sorted by the Network object. To support multiple clocks we'll need to be
         # smarter about that.
@@ -155,4 +155,4 @@ all_devices['android'] = android_device
 
 def build(net):
     android_device.build(net)
-    
+
