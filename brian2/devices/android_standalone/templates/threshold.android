@@ -1,15 +1,6 @@
-////////////////////////////////////////////////////////////////////////////
-//// MAIN CODE /////////////////////////////////////////////////////////////
-
-{% macro main() %}
-    // USE_SPECIFIERS { _num_neurons, not_refractory, lastspike, t }
-    ////// SUPPORT CODE ///////
-    {% for line in support_code_lines %}
-    // {{line}}
-    {% endfor %}
+{% macro rs_file() %}
 
 int run_{{codeobj_name}}() {
-    //// MAIN CODE ////////////
     long _numspikes = 0;
     for (int _idx=0; _idx<_num_idx; _idx++) {
         const int _vectorisation_idx = _idx;
@@ -27,13 +18,8 @@ int run_{{codeobj_name}}() {
 }
 {% endmacro %}
 
-////////////////////////////////////////////////////////////////////////////
-//// SUPPORT CODE //////////////////////////////////////////////////////////
-
-{% macro support_code() %}
-    {% for line in support_code_lines %}
-    // {{line}}
-    {% endfor %}
+{% macro java_file() %}
+    mScript.invoke_run_{{codeobj_name}}();
 {% endmacro %}
 
 

@@ -1,9 +1,5 @@
-//// MAIN CODE /////////////////////////////////////////////////////////////
+{% macro rs_file() %}
 
-{% macro main() %}
-    // USE_SPECIFIERS { _spikes }
-
-    //// MAIN CODE ////////////
 int run_{{codeobj_name}}() {
     const int _num_spikes  = _spikespace[_num_spikespace-1];
     for(int _index__spikes=0; _index_spikes<_num_spikes; _index_spikes++) {
@@ -16,13 +12,8 @@ int run_{{codeobj_name}}() {
 }
 {% endmacro %}
 
-////////////////////////////////////////////////////////////////////////////
-//// SUPPORT CODE //////////////////////////////////////////////////////////
-
-{% macro support_code() %}
-    {% for line in support_code_lines %}
-    {{line}}
-    {% endfor %}
+{% macro java_file() %}
+    mScript.invoke_run_{{codeobj_name}}();
 {% endmacro %}
 
 

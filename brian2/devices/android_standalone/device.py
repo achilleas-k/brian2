@@ -121,7 +121,8 @@ class AndroidDevice(Device):
                 codeobj = updater.owner
                 ns = codeobj.namespace
                 # TODO: fix these freeze/CONSTANTS hacks somehow - they work but not elegant.
-                print "allcode: ",codeobj.code
+                print "codeobject: "+codeobj._name
+                print "template attribs: ", codeobj.code.__dict__.keys()
                 code_rs = freeze(codeobj.code.rs_file, ns)
                 code_rs = code_rs.replace('%CONSTANTS%', '\n'.join(code_object_defs[codeobj.name]))
 
@@ -142,20 +143,20 @@ class AndroidDevice(Device):
         # The code_objects are passed in the right order to run them because they were
         # sorted by the Network object. To support multiple clocks we'll need to be
         # smarter about that.
-        main_tmp = AndroidCodeObject.templater.main(None,
-                                                          run_lines=run_lines,
-                                                          code_objects=self.code_objects.values(),
-                                                          num_steps=1000,
-                                                          dt=float(defaultclock.dt),
-                                                          )
-        print "name: main"
-        print "code: "+main_tmp
+        # TODO: Use "main" template for dt, duration, and other global values
+        #main_tmp = AndroidCodeObject.templater.main(None,
+        #                                                  run_lines=run_lines,
+        #                                                  code_objects=self.code_objects.values(),
+        #                                                  num_steps=1000,
+        #                                                  dt=float(defaultclock.dt),
+        #                                                  )
         #open('output/main.java', 'w').write(main_tmp)
 
+        # TODO: Print code to final templates
         # Copy the brianlibdirectory
-        brianlib_dir = os.path.join(os.path.split(inspect.getsourcefile(AndroidCodeObject))[0],
-                                    'brianlib')
-        copy_directory(brianlib_dir, 'output/brianlib')
+        #brianlib_dir = os.path.join(os.path.split(inspect.getsourcefile(AndroidCodeObject))[0],
+        #                            'brianlib')
+        #copy_directory(brianlib_dir, 'output/brianlib')
 
 
 android_device = AndroidDevice()
