@@ -21,10 +21,11 @@ class NumpyCodeObject(CodeObject):
                                        'templates'))
     language = NumpyLanguage()
 
-    def __init__(self, code, namespace, variables, name='numpy_code_object*'):
+    def __init__(self, owner, code, namespace, variables, name='numpy_code_object*'):
         # TODO: This should maybe go somewhere else
         namespace['logical_not'] = np.logical_not
-        CodeObject.__init__(self, code, namespace, variables, name=name)
+        CodeObject.__init__(self, owner, code, namespace, variables, name=name)
+        namespace['_owner'] = self.owner
 
     def variables_to_namespace(self):
         # Variables can refer to values that are either constant (e.g. dt)
