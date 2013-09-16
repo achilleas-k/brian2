@@ -84,10 +84,11 @@ class AndroidDevice(Device):
                 for k, v in obj.variables.iteritems():
                     vars[(obj, k)] = v
 
-        if not os.path.exists('output'):
-            os.mkdir('output')
+        #if not os.path.exists('output'):
+        #    os.mkdir('output')
 
         # Write the arrays
+        # TODO: array code
         #array_specs = [(k, java_data_type(v.dtype), len(v)) for k, v in self.arrays.iteritems()]
         #dynamic_array_specs = [(k, java_data_type(v.dtype)) for k, v in self.dynamic_arrays.iteritems()]
         #arr_tmp = AndroidCodeObject.templater.arrays(None, array_specs=array_specs,

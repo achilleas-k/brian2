@@ -1,6 +1,8 @@
-{% macro main() %}
+{% macro rs_file() %}
 
-    // USE_SPECIFIERS { _t, _i, t, _spikes, _count }
+{% endmacro %}
+
+{% macro java_file() %}
 
     if (_num_spikes > 0)
     {
@@ -8,14 +10,9 @@
         for(int _idx=0; _idx<_num_spikes; _idx++)
         {
             final int _neuron_idx = _spikes[_idx];
-            _t_data.add(t);
-            _i_data.add(_neuron_idx);
-            _count[_neuron_idx]++;
+            {{codeobj_name}}_spikemonitor.append(new Spike(_idx, t));
+            //_count[_neuron_idx]++;
         }
     }
 {% endmacro %}
-
-{% macro support_code() %}
-{% endmacro %}
-
 
