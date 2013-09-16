@@ -23,10 +23,10 @@ class AndroidCodeObject(CodeObject):
                                        'templates'))
     language = java_lang.JavaLanguage()
 
-    def __init__(self, code, namespace, variables, name='codeobject*'):
+    def __init__(self, owner, code, namespace, variables, name='codeobject*'):
         # global_codeobjects: temporary - helps keep track of initialised COs
         global_codeobjects.append(self)
-        super(AndroidCodeObject, self).__init__(code, namespace, variables, name=name)
+        super(AndroidCodeObject, self).__init__(owner, code, namespace, variables, name=name)
 
     def variables_to_namespace(self):
         # Variables can refer to values that are either constant (e.g. dt)
