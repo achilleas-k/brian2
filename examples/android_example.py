@@ -22,4 +22,5 @@ G2 = NeuronGroup(10, eqs_b, reset=reset, threshold=threshold, refractory=refract
 G.V = -1*mV
 SM = SpikeMonitor(G)
 net = Network(G, G2)
-android_device.build(net)
+net.generate_code()
+
