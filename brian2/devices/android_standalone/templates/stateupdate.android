@@ -1,0 +1,18 @@
+{% macro rs_file() %}
+
+int32_t __attribute__((kernel)) update_{{codeobj_name}}(int32_t _idx) {
+    const int _vectorisation_idx = _idx;
+    {% for line in code_lines %}
+    {{line}}
+    {% endfor %}
+    return _vectorisation_idx;
+}
+
+{% endmacro %}
+
+{% macro java_file() %}
+    mScript.forEach_update_{{codeobj_name}}({{group_name}}_idx_alloc, {{group_name}}_out_alloc);
+{% endmacro %}
+
+
+

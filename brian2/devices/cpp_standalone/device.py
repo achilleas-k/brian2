@@ -91,6 +91,7 @@ class CPPStandaloneDevice(Device):
         dynamic_array_specs = [(k, c_data_type(v.dtype)) for k, v in self.dynamic_arrays.iteritems()]
         arr_tmp = CPPStandaloneCodeObject.templater.arrays(None, array_specs=array_specs,
                                                            dynamic_array_specs=dynamic_array_specs)
+        import IPython; IPython.embed()
         open('output/arrays.cpp', 'w').write(arr_tmp.cpp_file)
         open('output/arrays.h', 'w').write(arr_tmp.h_file)
 

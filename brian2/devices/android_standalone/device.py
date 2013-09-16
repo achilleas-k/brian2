@@ -88,11 +88,11 @@ class AndroidDevice(Device):
             os.mkdir('output')
 
         # Write the arrays
-        array_specs = [(k, java_data_type(v.dtype), len(v)) for k, v in self.arrays.iteritems()]
-        dynamic_array_specs = [(k, java_data_type(v.dtype)) for k, v in self.dynamic_arrays.iteritems()]
-        arr_tmp = AndroidCodeObject.templater.arrays(None, array_specs=array_specs,
-                                                           dynamic_array_specs=dynamic_array_specs)
-        open('output/arrays.java', 'w').write(arr_tmp.java_file)
+        #array_specs = [(k, java_data_type(v.dtype), len(v)) for k, v in self.arrays.iteritems()]
+        #dynamic_array_specs = [(k, java_data_type(v.dtype)) for k, v in self.dynamic_arrays.iteritems()]
+        #arr_tmp = AndroidCodeObject.templater.arrays(None, array_specs=array_specs,
+        #                                                   dynamic_array_specs=dynamic_array_specs)
+        #open('output/arrays.java', 'w').write(arr_tmp.java_file)
 
         # Generate data for non-constant values
         code_object_defs = defaultdict(list)
@@ -121,14 +121,21 @@ class AndroidDevice(Device):
                 codeobj = updater.owner
                 ns = codeobj.namespace
                 # TODO: fix these freeze/CONSTANTS hacks somehow - they work but not elegant.
-                code = freeze(codeobj.code.cpp_file, ns)
-                code = code.replace('%CONSTANTS%', '\n'.join(code_object_defs[codeobj.name]))
-                code = '#include "arrays.h"\n'+code
+                print "allcode: ",codeobj.code
+                code_rs = freeze(codeobj.code.rs_file, ns)
+                code_rs = code_rs.replace('%CONSTANTS%', '\n'.join(code_object_defs[codeobj.name]))
 
-                open('output/'+codeobj.name+'.cpp', 'w').write(code)
-                open('output/'+codeobj.name+'.h', 'w').write(codeobj.code.h_file)
+                code_java = freeze(codeobj.code.java_file, ns)
 
-                run_lines.append('_run_%s(t);' % codeobj.name)
+                print "name: "+codeobj.name
+                print "rs code  : "+code_rs
+
+                print "java code: "+code_java
+
+                #open('output/'+codeobj.name+'.cpp', 'w').write(code)
+                #open('output/'+codeobj.name+'.h', 'w').write(codeobj.code.h_file)
+
+                #run_lines.append('_run_%s(t);' % codeobj.name)
             else:
                 raise NotImplementedError("Android device has not implemented "+cls.__name__)
 
@@ -141,7 +148,9 @@ class AndroidDevice(Device):
                                                           num_steps=1000,
                                                           dt=float(defaultclock.dt),
                                                           )
-        open('output/main.java', 'w').write(main_tmp)
+        print "name: main"
+        print "code: "+main_tmp
+        #open('output/main.java', 'w').write(main_tmp)
 
         # Copy the brianlibdirectory
         brianlib_dir = os.path.join(os.path.split(inspect.getsourcefile(AndroidCodeObject))[0],
