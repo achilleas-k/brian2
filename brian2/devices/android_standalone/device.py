@@ -89,15 +89,15 @@ class AndroidDevice(Device):
 
         # Write the arrays
         array_specs = [(k, java_data_type(v.dtype), len(v)) for k, v in self.arrays.iteritems()]
-        #dynamic_array_specs = [(k, java_data_type(v.dtype)) for k, v in self.dynamic_arrays.iteritems()]
         arr_tmp = AndroidCodeObject.templater.arrays(None, array_specs=array_specs)
-        #open('output/arrays.java', 'w').write(arr_tmp.java_file)
+        arrays_java = arr_tmp.java_code
+        arrays_rs = arr_tmp.rs_code
         print "arrays"
         print "------"
         print "java code:"
-        print arr_tmp.java_file
+        print arr_tmp.java_code
         print "rs code  :"
-        print arr_tmp.rs_file
+        print arr_tmp.rs_code
 
         # Generate data for non-constant values
         code_object_defs = defaultdict(list)
@@ -125,20 +125,16 @@ class AndroidDevice(Device):
             if cls is CodeObjectUpdater:
                 codeobj = updater.owner
                 ns = codeobj.namespace
-                # TODO: fix these freeze/CONSTANTS hacks somehow - they work but not elegant.
-                print "codeobject: "+codeobj._name
-                print "template attribs: ", codeobj.code.__dict__.keys()
-                code_rs = freeze(codeobj.code.rs_file, ns)
-                code_rs = code_rs.replace('%CONSTANTS%', '\n'.join(code_object_defs[codeobj.name]))
-
-                code_java = freeze(codeobj.code.java_file, ns)
-
                 print "name: "+codeobj.name
                 print "------"
-                print "rs code  : "+code_rs
-
-                print "java code: "+code_java
-
+                # TODO: fix these freeze/CONSTANTS hacks somehow - they work but not elegant.
+                if hasattr(codeobj.code, "rs_code"):
+                    code_rs = freeze(codeobj.code.rs_code, ns)
+                    #code_rs = code_rs.replace('%CONSTANTS%', '\n'.join(code_object_defs[codeobj.name]))
+                    print "rs code  : "+code_rs
+                if hasattr(codeobj.code, "java_code"):
+                    code_java = freeze(codeobj.code.java_code, ns)
+                    print "java code: "+code_java
                 #open('output/'+codeobj.name+'.cpp', 'w').write(code)
                 #open('output/'+codeobj.name+'.h', 'w').write(codeobj.code.h_file)
 
@@ -150,6 +146,7 @@ class AndroidDevice(Device):
         # sorted by the Network object. To support multiple clocks we'll need to be
         # smarter about that.
         # TODO: Use "main" template for dt, duration, and other global values
+        java_code = AndroidCodeObject.templater.CodegenTemplate()
         #main_tmp = AndroidCodeObject.templater.main(None,
         #                                                  run_lines=run_lines,
         #                                                  code_objects=self.code_objects.values(),
