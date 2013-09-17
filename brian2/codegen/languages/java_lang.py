@@ -4,10 +4,12 @@ TODO: use preferences to get arguments to Language
 
 import numpy
 
-from brian2.utils.stringtools import deindent, stripped_deindented_lines
-from brian2.codegen.functions.base import Function
+from brian2.utils.stringtools import (deindent, stripped_deindented_lines,
+                                      word_substitute)
 from brian2.utils.logger import get_logger
 from brian2.parsing.rendering import JavaNodeRenderer
+from brian2.core.functions import (Function, FunctionImplementation,
+                                   DEFAULT_FUNCTIONS)
 from brian2.core.preferences import brian_prefs, BrianPreference
 from brian2.core.variables import ArrayVariable
 
@@ -111,10 +113,15 @@ class JavaLanguage(Language):
         self.flush_denormals = brian_prefs['codegen.languages.java.flush_denormals']
         self.java_data_type = java_data_type
 
-    def translate_expression(self, expr):
+    def translate_expression(self, expr, namespace, codeobj_class):
+        for varname, var in namespace.iteritems():
+            if isinstance(var, Function):
+                impl_name = var.implementations[codeobj_class].name
+                if impl_name is not None:
+                    expr = word_substitute(expr, {varname: impl_name})
         return JavaNodeRenderer().render_expr(expr).strip()
 
-    def translate_statement(self, statement):
+    def translate_statement(self, statement, namespace, codeobj_class):
         var, op, expr = statement.var, statement.op, statement.expr
         if op == ':=':
             decl = self.java_data_type(statement.dtype)['java'] + ' '
@@ -123,11 +130,13 @@ class JavaLanguage(Language):
                 decl = 'const ' + decl
         else:
             decl = ''
-        return decl + var + ' ' + op + ' ' +\
-                self.translate_expression(expr) + ';'
+        return decl + var + ' ' + op + ' ' + self.translate_expression(expr,
+                                                                       namespace,
+                                                                       codeobj_class) + ';'
 
     def translate_statement_sequence(self, statements, variables, namespace,
-                                     variable_indices, iterate_all):
+                                     variable_indices, iterate_all,
+                                     codeobj_class):
         # TODO: Clean up! There must be a lot of lines in here that aren't used for the Android object (pointer lines? hash defines?)
         read, write = self.array_read_write(statements, variables)
         lines = []
@@ -151,7 +160,8 @@ class JavaLanguage(Language):
                 line = self.java_data_type(var.dtype)['renderscript'] + ' ' + varname + ';'
                 lines.append(line)
         # the actual code
-        lines.extend([self.translate_statement(stmt) for stmt in statements])
+        lines.extend([self.translate_statement(stmt, namespace, codeobj_class)
+                      for stmt in statements])
         # write arrays
         for varname in write:
             index_var = variable_indices[varname]
@@ -201,11 +211,17 @@ class JavaLanguage(Language):
         #            else:
         #                namespace[pyfunc_name] = variable.pyfunc
 
-        # delete the user-defined functions from the namespace
-        for func in user_functions:
-            del namespace[func]
 
-        # return
+
+
+        # delete the user-defined functions from the namespace and add the
+        # function namespaces (if any)
+        for funcname, func in user_functions:
+            del namespace[funcname]
+            func_namespace = func.implementations[codeobj_class].namespace
+            if func_namespace is not None:
+                namespace.update(func_namespace)
+
         return (stripped_deindented_lines(code),
                 {'pointers_lines': stripped_deindented_lines(pointers),
                  'support_code_lines': stripped_deindented_lines(support_code),
@@ -223,3 +239,21 @@ class JavaLanguage(Language):
             '''
         else:
             return ''
+
+################################################################################
+# Implement functions
+################################################################################
+
+# Functions that exist under the same name in Android/Java
+#for func in ['sin', 'cos', 'tan', 'sinh', 'cosh', 'tanh', 'exp', 'log',
+#             'log10', 'sqrt', 'ceil', 'floor']:
+#    DEFAULT_FUNCTIONS[func].implementations[CPPLanguage] = FunctionImplementation()
+
+# Functions that need a name translation
+# NOTE: Here we list the functions that are coded in the android templates
+for func, func_android in [('exp', 'exp_rs'), ('sqrt', 'sqrt_rs'),
+                            #('pow', 'pow_rs'),
+                           ('int_', 'int_rs'),
+                           ('randn', 'randn_rs'), ('clip', 'clip_rs')]:
+    DEFAULT_FUNCTIONS[func].implementations[JavaLanguage] = FunctionImplementation(func_android)
+

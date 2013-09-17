@@ -1,12 +1,15 @@
 import os
+import numpy
+
+
+from brian2.core.variables import Variable, Subexpression, DynamicArrayVariable
+from brian2.core.preferences import brian_prefs, BrianPreference
+from brian2.core.functions import DEFAULT_FUNCTIONS, FunctionImplementation
 
 from ...codeobject import CodeObject
 from ...templates import Templater
 from ...languages import java_lang
-from ..targets import runtime_targets
-
-from brian2.core.preferences import brian_prefs, BrianPreference
-from brian2.core.variables import ArrayVariable, Variable, Subexpression
+from ...targets import codegen_targets
 
 
 __all__ = ['JavaCodeObject']
@@ -96,7 +99,7 @@ class JavaCodeObject(CodeObject):
 
     def run(self):
         # generate code
-        # TODO: Tidy up this code
+        # TODO: Tidy up this code, or delete it entirely - there shouldn't be a Java runtime
         code = {}
         constants = self.constants
         arrays = self.arrays
@@ -138,4 +141,4 @@ class JavaCodeObject(CodeObject):
             code['state_updaters'] += self.code.main+'\n'
         return code
 
-runtime_targets['java'] = JavaCodeObject
+#runtime_targets['java'] = JavaCodeObject
