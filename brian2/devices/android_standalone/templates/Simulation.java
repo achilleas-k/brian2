@@ -23,9 +23,9 @@ public class Simulation extends AsyncTask<Void, String, Void> {
     private final static String LOGID = "org.briansimulator.briandroid.Simulation";
     Context bdContext;
     TextView statusTextView;
-    float _duration;
+    float _duration = {{duration}};
     float t;
-    float dt = {{N}};
+    float dt = {{dt}}f;
     int simstate = 0;
 
     long runtimeDuration = -1;
@@ -83,7 +83,6 @@ public class Simulation extends AsyncTask<Void, String, Void> {
 
     public void setup() {
         publishProgress("Setting up simulation ...");
-        _duration = 1;
         mRS = RenderScript.create(bdContext);
         mScript = new ScriptC_renderscript(mRS);
 
