@@ -182,14 +182,6 @@ class JavaLanguage(Language):
                     lines.append(line)
                     arraynames.add(arrayname)
         pointers = '\n'.join(lines)
-        print "\n----\nThe list of arrays defined in java_lang for : "
-        for an in arraynames:
-            print an
-        print "\nAccompanying code:"
-        print code
-
-        print "\nPointers:"
-        print pointers
         # set up the functions
         user_functions = []
         support_code = ''
