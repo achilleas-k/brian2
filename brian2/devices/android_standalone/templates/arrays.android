@@ -16,14 +16,18 @@ private void _init_arrays()
 {
     {% for (varname, dtype_spec, N) in array_specs %}
     {{varname}} = new {{dtype_spec.java}}[{{N}}];
+    {% if dtype_spec.java == "boolean" %}
+    Arrays.fill({{varname}}, false);
+    {% else %}
     Arrays.fill({{varname}}, 0);
+    {% endif %}
     // case for booleans
     {% endfor %}
 }
 
 private void _bind_allocations() {
     {% for (varname, dtype_spec, N) in array_specs %}
-    {{varname}}_alloc = Allocation.createSized(mRS, Element.{{dtype_spec.allocation}}, {{N}};
+    {{varname}}_alloc = Allocation.createSized(mRS, Element.{{dtype_spec.allocation}}(mRS), {{N}});
     mScript.bind_{{varname}}({{varname}}_alloc);
     {% endfor %}
 }
@@ -32,7 +36,7 @@ private void _bind_allocations() {
 
 
 {% macro rs_code() %}
-    {% for (varname, dtype_spec, N) in array_specs %}
-    {{dtype_spec.renderscript}} *{{varname}};
-    {% endfor %}
+{% for (varname, dtype_spec, N) in array_specs %}
+{{dtype_spec.renderscript}} *{{varname}};
+{% endfor %}
 {% endmacro %}
