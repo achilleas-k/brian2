@@ -15,6 +15,7 @@ from brian2.devices.android_standalone.codeobject import global_codeobjects
 
 __all__ = ['Network']
 
+
 logger = get_logger(__name__)
 
 
@@ -252,12 +253,12 @@ class Network(Nameable):
         when_to_int = dict((when, i) for i, when in enumerate(self.schedule))
         self.objects.sort(key=lambda obj: (when_to_int[obj.when], obj.order))
 
-    def pre_run(self, namespace):
+    def before_run(self, namespace):
         '''
         Prepares the `Network` for a run.
 
         Objects in the `Network` are sorted into the correct running order, and
-        their `BrianObject.pre_run` methods are called.
+        their `BrianObject.before_run` methods are called.
         '''
         brian_prefs.check_all_validated()
 
@@ -272,20 +273,20 @@ class Network(Nameable):
                      "objects: {objnames}".format(self=self,
                         numobj=len(self.objects),
                         objnames=', '.join(obj.name for obj in self.objects)),
-                     "pre_run")
+                     "before_run")
 
         for obj in self.objects:
-            obj.pre_run(namespace)
+            obj.before_run(namespace)
 
         logger.debug("Network {self.name} has {num} "
                      "clocks: {clocknames}".format(self=self,
                         num=len(self._clocks),
                         clocknames=', '.join(obj.name for obj in self._clocks)),
-                     "pre_run")
+                     "before_run")
 
-    def post_run(self):
+    def after_run(self):
         for obj in self.objects:
-            obj.post_run()
+            obj.after_run()
 
     def _nextclocks(self):
         minclock = min(self._clocks, key=lambda c: c.t_)
@@ -334,10 +335,10 @@ class Network(Nameable):
         '''
 
         if namespace is not None:
-            self.pre_run(('explicit-run-namespace', namespace))
+            self.before_run(('explicit-run-namespace', namespace))
         else:
             namespace = get_local_namespace(2 + level)
-            self.pre_run(('implicit-run-namespace', namespace))
+            self.before_run(('implicit-run-namespace', namespace))
 
         if len(self.objects)==0:
             return # TODO: raise an error? warning?
@@ -353,6 +354,7 @@ class Network(Nameable):
         if report is not None:
             start = current = time.time()
             next_report_time = start + 10
+
         while clock.running and not self._stopped and not Network._globally_stopped:
             # update the network time to this clocks time
             self.t_ = clock.t_
@@ -382,7 +384,7 @@ class Network(Nameable):
 
         if report is not None:
             print 'Took ', current-start, 's in total.'
-        self.post_run()
+        self.after_run()
 
     @check_units(duration=second, report_period=second)
     def generate_code(self, report=None, report_period=60*second,
@@ -496,4 +498,5 @@ class Network(Nameable):
 
     def __repr__(self):
         return '<%s at time t=%s, containing objects: %s>' % (self.__class__.__name__,
+                                                              str(self.t),
                                                               ', '.join((obj.__repr__() for obj in self.objects)))
