@@ -1,0 +1,38 @@
+{% macro java_file() %}
+
+
+// global arrays
+{% for (varname, dtype_spec, N) in array_specs %}
+{{dtype_spec.java}}[] {{varname}};
+final int _num_{{varname}} = {{N}};
+{% endfor %}
+
+// Allocation objects (for memory binding)
+{% for (varname, dtype_spec) in array_specs %}
+Allocation {{varname}}_alloc;
+{% endfor %}
+
+private void _init_arrays()
+{
+    {% for (varname, dtype_spec, N) in array_specs %}
+    {{varname}} = new {{dtype_spec.java}}[{{N}}];
+    Arrays.fill({{varname}}, 0);
+    // case for booleans
+    {% endfor %}
+}
+
+private void _bind_allocations() {
+    {% for (varname, dtype_spec, N) in array_specs %}
+    {{varname}}_alloc = Allocation.createSized(mRS, Element.{{dtype_spec.allocation}}, {{N}};
+    mScript.bind_{{varname}}({{varname}}_alloc);
+    {% endfor %}
+}
+
+{% endmacro %}
+
+
+{% macro rs_file() %}
+    {% for (varname, dtype_spec, N) in array_specs %}
+    {{dtype_spec.renderscript}} *{{varname}};
+    {% endfor %}
+{% endmacro %}
