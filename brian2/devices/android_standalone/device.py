@@ -71,7 +71,6 @@ class AndroidDevice(Device):
         # Extract all the CodeObjects
         # Note that since we ran the Network object, these CodeObjects will be sorted into the right
         # running order, assuming that there is only one clock
-        print "building"
         updaters = []
         for obj in net.objects:
             for updater in obj.updaters:
@@ -84,20 +83,15 @@ class AndroidDevice(Device):
                 for k, v in obj.variables.iteritems():
                     vars[(obj, k)] = v
 
-        #if not os.path.exists('output'):
-        #    os.mkdir('output')
+
+        if not os.path.exists('output'):
+            os.mkdir('output')
 
         # Write the arrays
         array_specs = [(k, java_data_type(v.dtype), len(v)) for k, v in self.arrays.iteritems()]
         arr_tmp = AndroidCodeObject.templater.arrays(None, array_specs=array_specs)
         arrays_java = arr_tmp.java_code
         arrays_rs = arr_tmp.rs_code
-        print "arrays"
-        print "------"
-        print "java code:"
-        print arr_tmp.java_code
-        print "rs code  :"
-        print arr_tmp.rs_code
 
         # Generate data for non-constant values
         code_object_defs = defaultdict(list)
@@ -119,22 +113,19 @@ class AndroidDevice(Device):
                         code_object_defs[codeobj.name].append(code)
 
         # Generate the updaters
-        run_lines = []
+        update_code_rs = ""
+        update_code_java = ""
         for updater in updaters:
             cls = updater.__class__
             if cls is CodeObjectUpdater:
                 codeobj = updater.owner
                 ns = codeobj.namespace
-                print "name: "+codeobj.name
-                print "------"
-                # TODO: fix these freeze/CONSTANTS hacks somehow - they work but not elegant.
+                # TODO: CONSTANTS
                 if hasattr(codeobj.code, "rs_code"):
-                    code_rs = freeze(codeobj.code.rs_code, ns)
+                    update_code_rs += freeze(codeobj.code.rs_code, ns)
                     #code_rs = code_rs.replace('%CONSTANTS%', '\n'.join(code_object_defs[codeobj.name]))
-                    print "rs code  : "+code_rs
                 if hasattr(codeobj.code, "java_code"):
-                    code_java = freeze(codeobj.code.java_code, ns)
-                    print "java code: "+code_java
+                    update_code_java += freeze(codeobj.code.java_code, ns)
                 #open('output/'+codeobj.name+'.cpp', 'w').write(code)
                 #open('output/'+codeobj.name+'.h', 'w').write(codeobj.code.h_file)
 
@@ -142,25 +133,22 @@ class AndroidDevice(Device):
             else:
                 raise NotImplementedError("Android device has not implemented "+cls.__name__)
 
-        # The code_objects are passed in the right order to run them because they were
-        # sorted by the Network object. To support multiple clocks we'll need to be
-        # smarter about that.
-        # TODO: Use "main" template for dt, duration, and other global values
-        java_code = AndroidCodeObject.templater.CodegenTemplate()
-        #main_tmp = AndroidCodeObject.templater.main(None,
-        #                                                  run_lines=run_lines,
-        #                                                  code_objects=self.code_objects.values(),
-        #                                                  num_steps=1000,
-        #                                                  dt=float(defaultclock.dt),
-        #                                                  )
-        #open('output/main.java', 'w').write(main_tmp)
-
-        # TODO: Print code to final templates
-        # Copy the brianlibdirectory
-        #brianlib_dir = os.path.join(os.path.split(inspect.getsourcefile(AndroidCodeObject))[0],
-        #                            'brianlib')
-        #copy_directory(brianlib_dir, 'output/brianlib')
-
+        simulation_file_code = AndroidCodeObject.templater.Simulation(None,
+                                                           arrays=arrays_java,
+                                                           kernel_calls=update_code_java,
+                                                           duration=1, # NOTE: Duration
+                                                           dt=float(defaultclock.dt),
+                                                           idx_initialisations="INDEX INITIALISERS PLS",
+                                                           )
+        renderscript_file_code = AndroidCodeObject.templater.renderscript(None,
+                                                                          arrays=arrays_rs,
+                                                                          #constants=constants,
+                                                                          updaters=update_code_rs,
+                                                                          dt=float(defaultclock.dt)
+                                                                          )
+        open('output/Simulation.java', 'w').write(simulation_file_code)
+        open('output/renderscript.rs', 'w').write(renderscript_file_code)
+        print("Code generation complete. Generated code can be found in ``output`` directory.")
 
 android_device = AndroidDevice()
 
