@@ -77,97 +77,99 @@ class AndroidCodeObject(CodeObject):
                     if not var.scalar:
                         self.namespace['_num' + name] = var.get_len()
 
-
     def run(self):
-        # generate code
-        # TODO: Tidy up this code
-        code = {}
-        #print "\n\n"+self._name+" ============"
-        #print "\tconstants"
-        #for con in self.constants:
-        #    print "\t\t", con
-        #print "\tarrays"
-        #for arr in self.arrays:
-        #    print "\t\t", arr
-        #print "\tnamespace keys"
-        #for k in self.namespace.keys():
-        #    print "\t\t", k
-        constants = self.constants
-        arrays = self.arrays
-        functions = self.functions
-        if len(constants) > 0:
-            code['%RENDERSCRIPT CONSTANTS%'] = ''#'// CONSTANT DECLARATIONS\n'
-            for dtype, k, v in constants:
-                code['%RENDERSCRIPT CONSTANTS%'] += 'const %s %s = %s;\n' % (dtype, k, v)
-        # array definitions for Java
-        group_N = 0
-        if len(arrays) > 0 and 'stateupdater' in self.name:
-            code['%JAVA ARRAY DECLARATIONS%']    = ''#'// JAVA ARRAY DEFINITIONS\n'
-            code['%JAVA ARRAY INITIALISATIONS%'] = ''#'// JAVA ARRAY INITIALISATIONS\n'
-            code['%RENDERSCRIPT ARRAYS%']        = ''#'// RENDERSCRIPT ARRAY DEFINITIONS\n'
-            code['%ALLOCATION DECLARATIONS%']    = ''#'// ALLOCATION DEFINITIONS\n'
-            code['%ALLOCATION INITIALISATIONS%'] = ''#'// ALLOCATION INITIALISATIONS\n'
-            code['%MEMORY BINDINGS%']            = ''#'// MEMORY BINDINGS\n'
-            for varname, dtype_spec, N in arrays:
-                varname_alloc = varname+"_alloc"
-                javatype = dtype_spec['java']
-                rstype = dtype_spec['renderscript']
-                alloctype = dtype_spec['allocation']
-                code['%JAVA ARRAY DECLARATIONS%'] += '%s[] %s;\n' % (javatype, varname)
-                code['%JAVA ARRAY INITIALISATIONS%'] += '%s = new %s[%s];\n' % (varname,
-                                                                   javatype, N)
-                # TODO: fix this (initialises everything to 0)
-                if javatype == 'boolean':
-                    defval = 'false'
-                else:
-                    defval = '0'
-                code['%JAVA ARRAY INITIALISATIONS%'] += 'Arrays.fill(%s, %s);\n' % (varname, defval)
+        raise RuntimeError("Cannot run in Android standalone mode")
 
-                code['%RENDERSCRIPT ARRAYS%'] += '%s *%s;\n' % (rstype, varname)
-                code['%ALLOCATION DECLARATIONS%'] += 'Allocation %s;\n' % (varname_alloc)
-                code['%ALLOCATION INITIALISATIONS%'] += \
-                    '%s = Allocation.createSized(mRS, Element.%s(mRS), %s);\n' % (varname_alloc, alloctype, N)
-                code['%MEMORY BINDINGS%'] += 'mScript.bind_%s(%s);\n' % (varname, varname_alloc)
-                group_N = N  # TODO: get this elsewhere
-            # Code for indexer
-            group_name = self.name.split('_')[0]
-            idxname = group_name+'_idx'
-            outname = group_name+'_out'
-            idxname_alloc = idxname+'_alloc'
-            outname_alloc = outname+'_alloc'
-            code['%ALLOCATION DECLARATIONS%'] += 'Allocation %s;\n' % (idxname_alloc)
-            code['%ALLOCATION DECLARATIONS%'] += 'Allocation %s;\n' % (outname_alloc)
-            code['%ALLOCATION INITIALISATIONS%'] += \
-                '%s = Allocation.createSized(mRS, Element.I32(mRS), %s);\n' % (
-                    idxname_alloc, N
-                )
-            code['%ALLOCATION INITIALISATIONS%'] += \
-                '%s = Allocation.createSized(mRS, Element.I32(mRS), %s);\n' % (
-                    outname_alloc, N
-                )
-            code['%JAVA ARRAY DECLARATIONS%'] += 'int[] %s;\n' % (idxname)
-            code['%JAVA ARRAY DECLARATIONS%'] += 'int[] %s;\n' % (outname)
-            code['%JAVA ARRAY INITIALISATIONS%'] += '%s = new int[%s];\n' % (
-                idxname, group_N
-            )
-            code['%JAVA ARRAY INITIALISATIONS%'] += '%s = new int[%s];\n' % (
-                outname, group_N
-            )
-            code['%JAVA IDX INITIALISATIONS%'] = (
-                'for (int idx=0; idx<%(N)s; idx++){\n'
-                '%(idxname)s[idx] = idx;\n'
-                '}\n'
-                '%(allocname)s.copyFrom(%(idxname)s);\n' % (
-                    {'N': group_N, 'idxname': idxname, 'allocname': idxname_alloc}
-                )
-            )
-            code['%KERNEL CALLS%'] = (
-                'mScript.forEach_update_%s(%s, %s);' % (
-                    self.name, idxname_alloc, outname_alloc
-                )
-            )
-
-        if len(code) > 0 and 'stateupdater' in self.name:
-            code['%STATE UPDATERS%'] = '// STATE UPDATERS FOR %s\n' % (self.name)
-            code['%STATE UPDATERS%'] += self.code.main+'\n'
-        return code
+#    def run(self):
+#        # generate code
+#        # TODO: Tidy up this code
+#        code = {}
+#        #print "\n\n"+self._name+" ============"
+#        #print "\tconstants"
+#        #for con in self.constants:
+#        #    print "\t\t", con
+#        #print "\tarrays"
+#        #for arr in self.arrays:
+#        #    print "\t\t", arr
+#        #print "\tnamespace keys"
+#        #for k in self.namespace.keys():
+#        #    print "\t\t", k
+#        constants = self.constants
+#        arrays = self.arrays
+#        functions = self.functions
+#        if len(constants) > 0:
+#            code['%RENDERSCRIPT CONSTANTS%'] = ''#'// CONSTANT DECLARATIONS\n'
+#            for dtype, k, v in constants:
+#                code['%RENDERSCRIPT CONSTANTS%'] += 'const %s %s = %s;\n' % (dtype, k, v)
+#        # array definitions for Java
+#        group_N = 0
+#        if len(arrays) > 0 and 'stateupdater' in self.name:
+#            code['%JAVA ARRAY DECLARATIONS%']    = ''#'// JAVA ARRAY DEFINITIONS\n'
+#            code['%JAVA ARRAY INITIALISATIONS%'] = ''#'// JAVA ARRAY INITIALISATIONS\n'
+#            code['%RENDERSCRIPT ARRAYS%']        = ''#'// RENDERSCRIPT ARRAY DEFINITIONS\n'
+#            code['%ALLOCATION DECLARATIONS%']    = ''#'// ALLOCATION DEFINITIONS\n'
+#            code['%ALLOCATION INITIALISATIONS%'] = ''#'// ALLOCATION INITIALISATIONS\n'
+#            code['%MEMORY BINDINGS%']            = ''#'// MEMORY BINDINGS\n'
+#            for varname, dtype_spec, N in arrays:
+#                varname_alloc = varname+"_alloc"
+#                javatype = dtype_spec['java']
+#                rstype = dtype_spec['renderscript']
+#                alloctype = dtype_spec['allocation']
+#                code['%JAVA ARRAY DECLARATIONS%'] += '%s[] %s;\n' % (javatype, varname)
+#                code['%JAVA ARRAY INITIALISATIONS%'] += '%s = new %s[%s];\n' % (varname,
+#                                                                   javatype, N)
+#                # TODO: fix this (initialises everything to 0)
+#                if javatype == 'boolean':
+#                    defval = 'false'
+#                else:
+#                    defval = '0'
+#                code['%JAVA ARRAY INITIALISATIONS%'] += 'Arrays.fill(%s, %s);\n' % (varname, defval)
+#
+#                code['%RENDERSCRIPT ARRAYS%'] += '%s *%s;\n' % (rstype, varname)
+#                code['%ALLOCATION DECLARATIONS%'] += 'Allocation %s;\n' % (varname_alloc)
+#                code['%ALLOCATION INITIALISATIONS%'] += \
+#                    '%s = Allocation.createSized(mRS, Element.%s(mRS), %s);\n' % (varname_alloc, alloctype, N)
+#                code['%MEMORY BINDINGS%'] += 'mScript.bind_%s(%s);\n' % (varname, varname_alloc)
+#                group_N = N  # TODO: get this elsewhere
+#            # Code for indexer
+#            group_name = self.name.split('_')[0]
+#            idxname = group_name+'_idx'
+#            outname = group_name+'_out'
+#            idxname_alloc = idxname+'_alloc'
+#            outname_alloc = outname+'_alloc'
+#            code['%ALLOCATION DECLARATIONS%'] += 'Allocation %s;\n' % (idxname_alloc)
+#            code['%ALLOCATION DECLARATIONS%'] += 'Allocation %s;\n' % (outname_alloc)
+#            code['%ALLOCATION INITIALISATIONS%'] += \
+#                '%s = Allocation.createSized(mRS, Element.I32(mRS), %s);\n' % (
+#                    idxname_alloc, N
+#                )
+#            code['%ALLOCATION INITIALISATIONS%'] += \
+#                '%s = Allocation.createSized(mRS, Element.I32(mRS), %s);\n' % (
+#                    outname_alloc, N
+#                )
+#            code['%JAVA ARRAY DECLARATIONS%'] += 'int[] %s;\n' % (idxname)
+#            code['%JAVA ARRAY DECLARATIONS%'] += 'int[] %s;\n' % (outname)
+#            code['%JAVA ARRAY INITIALISATIONS%'] += '%s = new int[%s];\n' % (
+#                idxname, group_N
+#            )
+#            code['%JAVA ARRAY INITIALISATIONS%'] += '%s = new int[%s];\n' % (
+#                outname, group_N
+#            )
+#            code['%JAVA IDX INITIALISATIONS%'] = (
+#                'for (int idx=0; idx<%(N)s; idx++){\n'
+#                '%(idxname)s[idx] = idx;\n'
+#                '}\n'
+#                '%(allocname)s.copyFrom(%(idxname)s);\n' % (
+#                    {'N': group_N, 'idxname': idxname, 'allocname': idxname_alloc}
+#                )
+#            )
+#            code['%KERNEL CALLS%'] = (
+#                'mScript.forEach_update_%s(%s, %s);' % (
+#                    self.name, idxname_alloc, outname_alloc
+#                )
+#            )
+#
+#        if len(code) > 0 and 'stateupdater' in self.name:
+#            code['%STATE UPDATERS%'] = '// STATE UPDATERS FOR %s\n' % (self.name)
+#            code['%STATE UPDATERS%'] += self.code.main+'\n'
+#        return code
