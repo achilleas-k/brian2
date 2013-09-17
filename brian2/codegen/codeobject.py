@@ -1,4 +1,5 @@
 import functools
+import weakref
 
 from brian2.core.variables import ArrayVariable
 from brian2.core.functions import Function
