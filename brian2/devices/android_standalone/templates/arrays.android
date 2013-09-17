@@ -1,4 +1,4 @@
-{% macro java_file() %}
+{% macro java_code() %}
 
 
 // global arrays
@@ -31,7 +31,7 @@ private void _bind_allocations() {
 {% endmacro %}
 
 
-{% macro rs_file() %}
+{% macro rs_code() %}
     {% for (varname, dtype_spec, N) in array_specs %}
     {{dtype_spec.renderscript}} *{{varname}};
     {% endfor %}

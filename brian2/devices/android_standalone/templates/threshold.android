@@ -1,4 +1,4 @@
-{% macro rs_file() %}
+{% macro rs_code() %}
 
 int run_{{codeobj_name}}() {
     long _numspikes = 0;
@@ -18,7 +18,7 @@ int run_{{codeobj_name}}() {
 }
 {% endmacro %}
 
-{% macro java_file() %}
+{% macro java_code() %}
     mScript.invoke_run_{{codeobj_name}}();
 {% endmacro %}
 

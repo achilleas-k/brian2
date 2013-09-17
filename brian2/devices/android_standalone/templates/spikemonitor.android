@@ -1,8 +1,4 @@
-{% macro rs_file() %}
-
-{% endmacro %}
-
-{% macro java_file() %}
+{% macro java_code() %}
 
     if (_num_spikes > 0)
     {
