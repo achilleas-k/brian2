@@ -1,6 +1,6 @@
 {% macro rs_code() %}
 
-int run_{{codeobj_name}}() {
+int32_t __attribute__((kernel)) update_{{codeobj_name}}(int32_t _idx) {
     const int _num_spikes  = _spikespace[_num_spikespace-1];
     for(int _index__spikes=0; _index_spikes<_num_spikes; _index_spikes++) {
         const int _neuron_idx = _spikespace[_index_spikes];
@@ -9,6 +9,7 @@ int run_{{codeobj_name}}() {
         {{line}}
         {% endfor %}
     }
+    return _idx;
 }
 {% endmacro %}
 
