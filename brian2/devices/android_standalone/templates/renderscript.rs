@@ -2,7 +2,7 @@
 #pragma rs java_package_name(org.briansimulator.briandroid)
 
 float t;
-float dt = {{dt}};
+float dt = {{dt}}f;
 
 // START CUSTOM FUNCTIONS //
 
