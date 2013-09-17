@@ -88,12 +88,16 @@ class AndroidDevice(Device):
         #    os.mkdir('output')
 
         # Write the arrays
-        # TODO: array code
-        #array_specs = [(k, java_data_type(v.dtype), len(v)) for k, v in self.arrays.iteritems()]
+        array_specs = [(k, java_data_type(v.dtype), len(v)) for k, v in self.arrays.iteritems()]
         #dynamic_array_specs = [(k, java_data_type(v.dtype)) for k, v in self.dynamic_arrays.iteritems()]
-        #arr_tmp = AndroidCodeObject.templater.arrays(None, array_specs=array_specs,
-        #                                                   dynamic_array_specs=dynamic_array_specs)
+        arr_tmp = AndroidCodeObject.templater.arrays(None, array_specs=array_specs)
         #open('output/arrays.java', 'w').write(arr_tmp.java_file)
+        print "arrays"
+        print "------"
+        print "java code:"
+        print arr_tmp.java_file
+        print "rs code  :"
+        print arr_tmp.rs_file
 
         # Generate data for non-constant values
         code_object_defs = defaultdict(list)
@@ -130,6 +134,7 @@ class AndroidDevice(Device):
                 code_java = freeze(codeobj.code.java_file, ns)
 
                 print "name: "+codeobj.name
+                print "------"
                 print "rs code  : "+code_rs
 
                 print "java code: "+code_java

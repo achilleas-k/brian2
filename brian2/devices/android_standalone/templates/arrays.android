@@ -8,7 +8,7 @@ final int _num_{{varname}} = {{N}};
 {% endfor %}
 
 // Allocation objects (for memory binding)
-{% for (varname, dtype_spec) in array_specs %}
+{% for (varname, dtype_spec, N) in array_specs %}
 Allocation {{varname}}_alloc;
 {% endfor %}
 
