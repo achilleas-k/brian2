@@ -1,5 +1,5 @@
 #pragma version(1)
-#pragma rs java_package_name(org.briansimulator.briandroidtemplate)
+#pragma rs java_package_name(org.briansimulator.briandroid)
 
 float t;
 float dt = {{dt}};
