@@ -176,7 +176,6 @@ public class Simulation extends AsyncTask<Void, String, Void> {
         for (t=0; t<_duration; t+=dt) {
             mScript.set_t(t);
             {{ kernel_calls }}
-            mRS.finish();
         }
         publishProgress("Simulation complete!\n");
         runtimeDuration = System.currentTimeMillis()-sim_start;
