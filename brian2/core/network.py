@@ -395,7 +395,8 @@ class Network(Nameable):
         ...
 
         '''
-
+        # NOTE: remove this print
+        print "GENERATE CODE SHOULD NOT BE USED!!!"
         if namespace is not None:
             self.pre_run(('explicit-run-namespace', namespace))
         else:
