@@ -56,10 +56,10 @@ class CPPStandaloneDevice(Device):
             raise ValueError("Cannot specify codeobj_class for C++ standalone device.")
         return CPPStandaloneCodeObject
 
-    def code_object(self, owner, name, abstract_code, namespace, variables, template_name,
+    def code_object(self, name, abstract_code, namespace, variables, template_name,
                     indices, variable_indices, codeobj_class=None,
                     template_kwds=None):
-        codeobj = super(CPPStandaloneDevice, self).code_object(owner, name, abstract_code, namespace, variables,
+        codeobj = super(CPPStandaloneDevice, self).code_object(name, abstract_code, namespace, variables,
                                                                template_name, indices, variable_indices,
                                                                codeobj_class=codeobj_class,
                                                                template_kwds=template_kwds,
@@ -91,7 +91,6 @@ class CPPStandaloneDevice(Device):
         dynamic_array_specs = [(k, c_data_type(v.dtype)) for k, v in self.dynamic_arrays.iteritems()]
         arr_tmp = CPPStandaloneCodeObject.templater.arrays(None, array_specs=array_specs,
                                                            dynamic_array_specs=dynamic_array_specs)
-        import IPython; IPython.embed()
         open('output/arrays.cpp', 'w').write(arr_tmp.cpp_file)
         open('output/arrays.h', 'w').write(arr_tmp.h_file)
 
