@@ -1,16 +1,14 @@
+{% macro monitor_declaration() %}
+        {% if owner is defined %}
+        SpikeMonitor {{owner.source.name}}_spikemonitor = new SpikeMonitor();
+        {% endif %}
+{% endmacro %}
+
 {% macro java_code() %}
 
-    /*
-    if (_num_spikes > 0)
-    {
-        // Copy the values across
-        for(int _idx=0; _idx<_num_spikes; _idx++)
-        {
-            final int _neuron_idx = _spikes[_idx];
-            {{codeobj_name}}_spikemonitor.append(new Spike(_idx, t));
-            //_count[_neuron_idx]++;
-        }
-    }
-    */
+            {% if owner is defined %}
+            {{owner.source.name}}_spikemonitor.addSpikes(_array_{{owner.source.name}}__spikespace.clone(), t);
+            {% endif %}
+
 {% endmacro %}
 
