@@ -93,15 +93,15 @@ class AndroidDevice(Device):
         arrays_java = arr_tmp.java_code
         arrays_rs = arr_tmp.rs_code
 
-        # Indexer initialisation code
 
-        # Generate data for non-constant values
         code_object_defs = defaultdict(list)
         idx_init = ''
         for codeobj in self.code_objects.itervalues():
+            # Indexer initialisation code
             if hasattr(codeobj.owner, "N"):
-                idx_tmp = AndroidCodeObject.templater.idx_initialisations(None, codeobj_name=codeobj.name,
-                                                                          N=codeobj.owner.N)
+                idx_tmp = AndroidCodeObject.templater.idx_initialisations(
+                    None, codeobj_name=codeobj.name,
+                    N=codeobj.owner.N)
                 idx_init += idx_tmp.java_code
             for k, v in codeobj.variables.iteritems():
                 if k=='t':
@@ -112,13 +112,7 @@ class AndroidDevice(Device):
                     N = v.get_len()
                     code_object_defs[codeobj.name].append('const int _num%s = %s;' % (k, N))
                     if isinstance(v, DynamicArrayVariable):
-                        java_type = java_data_type(v.dtype)
-                        # TODO: Monitor handling
-                        # Create an alias name for the underlying array
-                        #code = ('{java_type}* {arrayname} = '
-                        #        '&(_dynamic{arrayname}[0]);').format(java_type=java_type,
-                        #                                              arrayname=v.arrayname)
-                        #code_object_defs[codeobj.name].append(code)
+                        pass
 
         # Generate the updaters
         update_code_rs = ""
@@ -134,26 +128,24 @@ class AndroidDevice(Device):
                     #code_rs = code_rs.replace('%CONSTANTS%', '\n'.join(code_object_defs[codeobj.name]))
                 if hasattr(codeobj.code, "java_code"):
                     update_code_java += freeze(codeobj.code.java_code, ns)
-                #open('output/'+codeobj.name+'.cpp', 'w').write(code)
-                #open('output/'+codeobj.name+'.h', 'w').write(codeobj.code.h_file)
-
-                #run_lines.append('_run_%s(t);' % codeobj.name)
+                if hasattr(codeobj.code, "monitor_declaration"):
+                    arrays_java += codeobj.code.monitor_declaration
             else:
                 raise NotImplementedError("Android device has not implemented "+cls.__name__)
 
         simulation_file_code = AndroidCodeObject.templater.Simulation(None,
-                                                           arrays=arrays_java,
-                                                           kernel_calls=update_code_java,
-                                                           duration=1, # NOTE: Duration
-                                                           dt=float(defaultclock.dt),
-                                                           idx_initialisations=idx_init,
-                                                           )
+                                                                      arrays=arrays_java,
+                                                                      kernel_calls=update_code_java,
+                                                                      duration=1,  # NOTE: Duration
+                                                                      dt=float(defaultclock.dt),
+                                                                      idx_initialisations=idx_init,
+                                                                      )
         renderscript_file_code = AndroidCodeObject.templater.renderscript(None,
                                                                           arrays=arrays_rs,
                                                                           #constants=constants,
                                                                           updaters=update_code_rs,
                                                                           dt=float(defaultclock.dt)
-                                                                          )
+        )
         open('output/Simulation.java', 'w').write(simulation_file_code)
         open('output/renderscript.rs', 'w').write(renderscript_file_code)
         print("Code generation complete. Generated code can be found in ``output`` directory.")
