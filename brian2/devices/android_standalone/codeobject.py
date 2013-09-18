@@ -29,53 +29,59 @@ class AndroidCodeObject(CodeObject):
         super(AndroidCodeObject, self).__init__(owner, code, namespace, variables, name=name)
 
     def variables_to_namespace(self):
-        # Variables can refer to values that are either constant (e.g. dt)
-        # or change every timestep (e.g. t). We add the values of the
-        # constant variables here and add the names of non-constant variables
-        # to a list
+        # We only copy constant scalar values to the namespace here
+        for varname, var in self.variables.iteritems():
+            if var.constant and var.scalar:
+                self.namespace[varname] = var.get_value()
 
-        # A list containing tuples of name and a function giving the value
-        self.nonconstant_values = []
-        constants = []
-        arrays = []
-        functions = []
-        for k, v in self.namespace.items():
-            if isinstance(v, float):
-                # TODO: Use the language submodule to translate
-                dtype = "float"
-                constants.append((dtype, k, repr(v)+'f'))
-            elif isinstance(v, int):
-                dtype = "int"
-                constants.append((dtype, k, repr(v)))
-            elif hasattr(v, '__call__'):
-                functions.append((k, v))
-        for k, v in self.variables.items():
-            if isinstance(v, ArrayVariable):
-                dtype_spec = java_lang.java_data_type(v.dtype)
-                # TODO: Perhaps it would be more convenient as a dictionary?
-                arrays.append((v.arrayname, dtype_spec, len(v.value)))
-
-        self.arrays = arrays
-        self.constants = constants
-        self.functions = functions
-
-        for name, var in self.variables.iteritems():
-            if isinstance(var, Variable) and not isinstance(var, Subexpression):
-                if not var.constant:
-                    self.nonconstant_values.append((name, var.get_value))
-                    if not var.scalar:
-                        self.nonconstant_values.append(('_num' + name,
-                                                        var.get_len))
-                else:
-                    try:
-                        value = var.get_value()
-                    except TypeError:  # A dummy Variable without value
-                        continue
-                    self.namespace[name] = value
-                    # if it is a type that has a length, add a variable called
-                    # '_num'+name with its length
-                    if not var.scalar:
-                        self.namespace['_num' + name] = var.get_len()
+#    def variables_to_namespace(self):
+#        # Variables can refer to values that are either constant (e.g. dt)
+#        # or change every timestep (e.g. t). We add the values of the
+#        # constant variables here and add the names of non-constant variables
+#        # to a list
+#
+#        # A list containing tuples of name and a function giving the value
+#        self.nonconstant_values = []
+#        constants = []
+#        arrays = []
+#        functions = []
+#        for k, v in self.namespace.items():
+#            if isinstance(v, float):
+#                # TODO: Use the language submodule to translate
+#                dtype = "float"
+#                constants.append((dtype, k, repr(v)+'f'))
+#            elif isinstance(v, int):
+#                dtype = "int"
+#                constants.append((dtype, k, repr(v)))
+#            elif hasattr(v, '__call__'):
+#                functions.append((k, v))
+#        for k, v in self.variables.items():
+#            if isinstance(v, ArrayVariable):
+#                dtype_spec = java_lang.java_data_type(v.dtype)
+#                # TODO: Perhaps it would be more convenient as a dictionary?
+#                arrays.append((v.arrayname, dtype_spec, len(v.value)))
+#
+#        self.arrays = arrays
+#        self.constants = constants
+#        self.functions = functions
+#
+#        for name, var in self.variables.iteritems():
+#            if isinstance(var, Variable) and not isinstance(var, Subexpression):
+#                if not var.constant:
+#                    self.nonconstant_values.append((name, var.get_value))
+#                    if not var.scalar:
+#                        self.nonconstant_values.append(('_num' + name,
+#                                                        var.get_len))
+#                else:
+#                    try:
+#                        value = var.get_value()
+#                    except TypeError:  # A dummy Variable without value
+#                        continue
+#                    self.namespace[name] = value
+#                    # if it is a type that has a length, add a variable called
+#                    # '_num'+name with its length
+#                    if not var.scalar:
+#                        self.namespace['_num' + name] = var.get_len()
 
     def run(self):
         raise RuntimeError("Cannot run in Android standalone mode")
