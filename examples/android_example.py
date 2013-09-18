@@ -7,10 +7,10 @@ set_device('android')
 tau_a = 10*ms
 tau_b = 20*ms
 eqs_a = '''
-dV/dt = -V/tau_a : volt (unless-refractory)
+dV/dt = -V/tau_a + 1*mV/ms : volt (unless-refractory)
 '''
 eqs_b = '''
-dV/dt = -V/tau_b : volt (unless-refractory)
+dV/dt = -V/tau_b + 1*mV/ms : volt (unless-refractory)
 '''
 threshold = 'V>-50*mV'
 reset = 'V=-60*mV'
@@ -21,6 +21,7 @@ G = NeuronGroup(N, eqs_a, reset=reset, threshold=threshold, refractory=refractor
 G2 = NeuronGroup(10, eqs_b, reset=reset, threshold=threshold, refractory=refractory, name='gp2')
 G.V = -1*mV
 SM = SpikeMonitor(G)
+#VM = StateMonitor(G, 'V', record=True)
 net = Network(G, G2, SM)
 #net.generate_code()
 net.run(0*second)
