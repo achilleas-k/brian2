@@ -4,12 +4,11 @@ import numpy
 from brian2.codegen.codeobject import CodeObject
 from brian2.codegen.templates import Templater
 from brian2.codegen.languages import java_lang
-from brian2.core.variables import ArrayVariable
-from brian2.core.variables import ArrayVariable, Variable, Subexpression
 
 __all__ = ['AndroidCodeObject']
 
 global_codeobjects = []
+
 
 class AndroidCodeObject(CodeObject):
     '''
