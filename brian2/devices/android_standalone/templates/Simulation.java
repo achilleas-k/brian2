@@ -180,9 +180,13 @@ public class Simulation extends AsyncTask<Void, String, Void> {
         publishProgress("Simulation complete!\n");
         runtimeDuration = System.currentTimeMillis()-sim_start;
         Log.d(LOGID, "DONE!");
+        // NOTE: Spike monitor name is not handled by template
+        publishProgress(gp_spikemonitor.nspikes+" spikes fired.\n");
+        publishProgress("Saving recorded spikes ... ");
+        writeToFile(gp_spikemonitor.getSpikeArray(), "briandroidSpikes.txt");
+        publishProgress("DONE!\n");
         publishProgress("Main loop run time: "+runtimeDuration+" ms\n");
         simstate = 2;
-
     }
 
 
