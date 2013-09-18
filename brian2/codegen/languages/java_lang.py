@@ -1,7 +1,6 @@
 '''
 TODO: use preferences to get arguments to Language
 '''
-
 import numpy
 
 from brian2.utils.stringtools import (deindent, stripped_deindented_lines,
@@ -83,7 +82,7 @@ brian_prefs.register_preferences(
         Found at `<http://stackoverflow.com/questions/2487653/avoiding-denormal-values-in-c>`_.
         ''',
         ),
-     )
+    )
 
 
 class JavaLanguage(Language):
@@ -102,6 +101,8 @@ class JavaLanguage(Language):
 
     ``support_code``
         The function definition which will be added to the support code.
+    ``hashdefine_code``
+        The ``#define`` code added to the main loop.
 
     See `TimedArray` for an example of these keys.
     '''
@@ -109,7 +110,7 @@ class JavaLanguage(Language):
     language_id = 'java'
 
     def __init__(self, java_data_type=java_data_type):
-        self.restrict = brian_prefs['codegen.languages.java.restrict_keyword']
+        self.restrict = ' '
         self.flush_denormals = brian_prefs['codegen.languages.java.flush_denormals']
         self.java_data_type = java_data_type
 
@@ -137,7 +138,10 @@ class JavaLanguage(Language):
     def translate_statement_sequence(self, statements, variables, namespace,
                                      variable_indices, iterate_all,
                                      codeobj_class):
+
         # TODO: Clean up! There must be a lot of lines in here that aren't used for the Android object (pointer lines? hash defines?)
+        #
+
         read, write = self.array_read_write(statements, variables)
         lines = []
         # read arrays
@@ -148,7 +152,6 @@ class JavaLanguage(Language):
                 line = 'const '
             else:
                 line = ''
-            line = ''
             line = line + self.java_data_type(var.dtype)['renderscript'] + ' ' + varname + ' = '
             line = line + '' + var.arrayname + '[' + index_var + '];'
             lines.append(line)
@@ -181,6 +184,7 @@ class JavaLanguage(Language):
                     lines.append(line)
                     arraynames.add(arrayname)
         pointers = '\n'.join(lines)
+
         # set up the functions
         user_functions = []
         support_code = ''
@@ -202,8 +206,6 @@ class JavaLanguage(Language):
                                      'not replacing it') % pyfunc_name)
                     else:
                         namespace[pyfunc_name] = variable.pyfunc
-
-
 
 
         # delete the user-defined functions from the namespace and add the

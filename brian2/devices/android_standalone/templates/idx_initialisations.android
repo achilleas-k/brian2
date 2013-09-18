@@ -1,13 +1,10 @@
 {% macro java_code() %}
 
-// initialise indexers
-{% for (varname, dtype_spec, N) in array_specs %}
-    int[] {{varname}}_idx = new int[{{N}}];
-    Allocation {{varname}}_idx_alloc = Allocation.createSized(mRS, Element.I32(mRS), {{N}});
-    for (int idx=0; idx<{{N}}; idx++){
-        {{varname}}_idx[idx] = idx;
-    }
-    gp2_idx_alloc.copyFrom({{varname}}_idx);
-{% endfor %}
-
+        int[] {{codeobj_name}}_idx = new int[{{N}}];
+        Allocation {{codeobj_name}}_idx_alloc = Allocation.createSized(mRS, Element.I32(mRS), {{N}});
+        Allocation {{codeobj_name}}_out_alloc = Allocation.createSized(mRS, Element.I32(mRS), {{N}});
+        for (int idx=0; idx<{{N}}; idx++){
+            {{codeobj_name}}_idx[idx] = idx;
+        }
+        {{codeobj_name}}_idx_alloc.copyFrom({{codeobj_name}}_idx);
 {% endmacro %}

@@ -10,7 +10,9 @@ int32_t __attribute__((kernel)) update_{{codeobj_name}}(int32_t _idx) {
 {% endmacro %}
 
 {% macro java_code() %}
-    mScript.forEach_update_{{codeobj_name}}({{group_name}}_idx_alloc, {{group_name}}_out_alloc);
+
+            mScript.forEach_update_{{codeobj_name}}({{codeobj_name}}_idx_alloc, {{codeobj_name}}_out_alloc);
+            mRS.finish();
 {% endmacro %}
 
 

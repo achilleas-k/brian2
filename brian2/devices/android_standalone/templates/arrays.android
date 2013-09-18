@@ -21,7 +21,6 @@ private void _init_arrays()
     {% else %}
     Arrays.fill({{varname}}, 0);
     {% endif %}
-    // case for booleans
     {% endfor %}
 }
 
@@ -38,5 +37,6 @@ private void _bind_allocations() {
 {% macro rs_code() %}
 {% for (varname, dtype_spec, N) in array_specs %}
 {{dtype_spec.renderscript}} *{{varname}};
+const int _num_{{varname}} = {{N}};
 {% endfor %}
 {% endmacro %}

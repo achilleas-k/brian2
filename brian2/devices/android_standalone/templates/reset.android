@@ -1,7 +1,11 @@
 {% macro rs_code() %}
 
 int32_t __attribute__((kernel)) update_{{codeobj_name}}(int32_t _idx) {
-    const int _num_spikes  = _spikespace[_num_spikespace-1];
+    {% if owner is defined %}
+    int32_t *_spikespace = _array_{{owner.name}}__spikespace;
+    const int _num_spikespace = _num__array_{{owner.name}}__spikespace;
+    float *lastspike = _array_{{owner.name}}_lastspike;
+    {% endif %}    const int _num_spikes  = _spikespace[_num_spikespace-1];
     for(int _index_spikes=0; _index_spikes<_num_spikes; _index_spikes++) {
         const int _neuron_idx = _spikespace[_index_spikes];
         const int _vectorisation_idx = _idx;
@@ -14,7 +18,8 @@ int32_t __attribute__((kernel)) update_{{codeobj_name}}(int32_t _idx) {
 {% endmacro %}
 
 {% macro java_code() %}
-    mScript.invoke_run_{{codeobj_name}}();
+            mScript.forEach_update_{{codeobj_name}}({{codeobj_name}}_idx_alloc, {{codeobj_name}}_out_alloc);
+            mRS.finish();
 {% endmacro %}
 
 

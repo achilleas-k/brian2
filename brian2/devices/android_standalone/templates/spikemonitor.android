@@ -1,5 +1,6 @@
 {% macro java_code() %}
 
+    /*
     if (_num_spikes > 0)
     {
         // Copy the values across
@@ -10,5 +11,6 @@
             //_count[_neuron_idx]++;
         }
     }
+    */
 {% endmacro %}
 

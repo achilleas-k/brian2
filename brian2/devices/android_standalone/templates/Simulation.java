@@ -167,11 +167,11 @@ public class Simulation extends AsyncTask<Void, String, Void> {
 
     //*********** MAIN LOOP *************
     public void run() {
-        publishProgress("Starting main run code ...\n");
+        publishProgress("Initialising ...\n");
         Log.d(LOGID, "Starting run code ...");
         simstate = 1;
         {{ idx_initialisations }}
-        publishProgress("Starting state updater loop ...\n");
+        publishProgress("Running simulation ...\n");
         long sim_start = System.currentTimeMillis();
         for (t=0; t<_duration; t+=dt) {
             mScript.set_t(t);

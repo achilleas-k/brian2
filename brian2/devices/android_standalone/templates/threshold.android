@@ -1,25 +1,30 @@
 {% macro rs_code() %}
 
-int run_{{codeobj_name}}() {
+int32_t __attribute__((kernel)) update_{{codeobj_name}}(int32_t _idx) {
+    {% if owner is defined %}
+    int32_t *_spikespace = _array_{{owner.name}}__spikespace;
+    const int _num_idx = _num__array_{{owner.name}}__spikespace-1;
+    float *lastspike = _array_{{owner.name}}_lastspike;
+    bool *not_refractory = _array_{{owner.name}}_not_refractory;
+    {% endif %}
     long _numspikes = 0;
-    for (int _idx=0; _idx<_num_idx; _idx++) {
-        const int _vectorisation_idx = _idx;
-        {% for line in code_lines %}
-        {{line}}
-        {% endfor %}
-        if(_cond) {
-            _spikespace[_numspikes++] = _idx;
-            not_refractory[_idx] = false;
-            lastspike[_idx] = t;
-        }
-        _spikespace[_num_idx] = _numspikes;
-        return _numspikes;
+    const int _vectorisation_idx = _idx;
+    {% for line in code_lines %}
+    {{line}}
+    {% endfor %}
+    if(_cond) {
+        _spikespace[_numspikes++] = _idx;
+        not_refractory[_idx] = false;
+        lastspike[_idx] = t;
     }
+    _spikespace[_num_idx] = _numspikes;
+    return _idx;
 }
 {% endmacro %}
 
 {% macro java_code() %}
-    mScript.invoke_run_{{codeobj_name}}();
+            mScript.forEach_update_{{codeobj_name}}({{codeobj_name}}_idx_alloc, {{codeobj_name}}_out_alloc);
+            mRS.finish();
 {% endmacro %}
 
 
