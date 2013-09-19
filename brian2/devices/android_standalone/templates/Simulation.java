@@ -93,67 +93,6 @@ public class Simulation extends AsyncTask<Void, String, Void> {
         publishProgress("DONE!\n");
     }
 
-    public boolean isExternalStorageWritable() {
-        String state = Environment.getExternalStorageState();
-        if (Environment.MEDIA_MOUNTED.equals(state)) {
-            return true;
-        }
-        return false;
-    }
-
-    private void writeToFile(float[][] monitor, String filename) {
-        Log.d(LOGID, "Writing to file "+filename);
-        if (isExternalStorageWritable()) {
-            final int N = monitor.length;
-            StringBuilder dataSB = new StringBuilder();
-            for (int idx=0; idx<N; idx++) {
-                float[] mon_idx = monitor[idx];
-                for (double mi : mon_idx) {
-                    dataSB.append(mi+" ");
-                }
-                dataSB.append("\n");
-            }
-            try {
-                File sdCard = Environment.getExternalStorageDirectory();
-                File dir = new File(sdCard.getAbsolutePath()+"/BrianDROIDout/"); //TODO: optional save path
-                dir.mkdirs();
-                File spikesFile = new File(dir, filename);
-                FileOutputStream spikesStream = new FileOutputStream(spikesFile);
-                spikesStream.write(dataSB.toString().getBytes()); // this might be inefficient
-                spikesStream.close();
-                Log.d(LOGID, "DONE!");
-            } catch (Exception e) {
-                Log.e(LOGID, "File write failed!");
-                e.printStackTrace();
-            }
-        }
-    }
-
-    private void writeToFile(ArrayList<?>[] monitor, String filename) {
-        if (isExternalStorageWritable()) {
-            final int N = monitor.length;
-            StringBuilder dataSB = new StringBuilder();
-            for (int idx=0; idx<N; idx++) {
-                ArrayList<Double> mon_idx = (ArrayList<Double>)monitor[idx];
-                for (double mi : mon_idx) {
-                    dataSB.append(mi+" ");
-                }
-                dataSB.append("\n");
-            }
-            try {
-                File sdCard = Environment.getExternalStorageDirectory();
-                File dir = new File(sdCard.getAbsolutePath()+"/BrianDROIDout/"); //TODO: optional save path
-                dir.mkdirs();
-                File spikesFile = new File(dir, filename);
-                FileOutputStream spikesStream = new FileOutputStream(spikesFile);
-                spikesStream.write(dataSB.toString().getBytes()); // this might be inefficient
-                spikesStream.close();
-            } catch (Exception e) {
-                e.printStackTrace();
-            }
-        }
-    }
-
     @Override
     protected void onProgressUpdate(String... text) {
         appendStatusText(text[0]);
@@ -183,7 +122,7 @@ public class Simulation extends AsyncTask<Void, String, Void> {
         // NOTE: Spike monitor name is not handled by template
         publishProgress(gp_spikemonitor.nspikes+" spikes fired.\n");
         publishProgress("Saving recorded spikes ... ");
-        writeToFile(gp_spikemonitor.getSpikeArray(), "briandroidSpikes.txt");
+        gp_spikemonitor.writeToFile("gp_spikemonitor.txt");
         publishProgress("DONE!\n");
         publishProgress("Main loop run time: "+runtimeDuration+" ms\n");
         simstate = 2;
