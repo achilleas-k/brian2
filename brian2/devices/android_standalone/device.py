@@ -71,6 +71,7 @@ class AndroidDevice(Device):
         # Extract all the CodeObjects
         # Note that since we ran the Network object, these CodeObjects will be sorted into the right
         # running order, assuming that there is only one clock
+        # TODO: Reorganise/simplify the template system
         updaters = []
         for obj in net.objects:
             for updater in obj.updaters:
@@ -117,6 +118,7 @@ class AndroidDevice(Device):
         # Generate the updaters
         update_code_rs = ""
         update_code_java = ""
+        monitor_listing = ""
         for updater in updaters:
             cls = updater.__class__
             if cls is CodeObjectUpdater:
@@ -130,6 +132,8 @@ class AndroidDevice(Device):
                     update_code_java += freeze(codeobj.code.java_code, ns)
                 if hasattr(codeobj.code, "monitor_declaration"):
                     arrays_java += codeobj.code.monitor_declaration
+                if hasattr(codeobj.code, "monitor_listing"):
+                    monitor_listing += codeobj.code.monitor_listing
             else:
                 raise NotImplementedError("Android device has not implemented "+cls.__name__)
 
@@ -139,6 +143,7 @@ class AndroidDevice(Device):
                                                                       duration=1,  # NOTE: Duration
                                                                       dt=float(defaultclock.dt),
                                                                       idx_initialisations=idx_init,
+                                                                      monitor_listing=monitor_listing,
                                                                       )
         renderscript_file_code = AndroidCodeObject.templater.renderscript(None,
                                                                           arrays=arrays_rs,

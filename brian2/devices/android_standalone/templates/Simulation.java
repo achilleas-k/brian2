@@ -79,10 +79,11 @@ public class Simulation extends AsyncTask<Void, String, Void> {
 
     //*********** GLOBAL VARS **********//
 
+    ArrayList<SpikeMonitor> monitors = new ArrayList<SpikeMonitor>();
     {{ arrays }}
 
     public void setup() {
-        publishProgress("Setting up simulation ...");
+        publishProgress("Setting up simulation ... ");
         mRS = RenderScript.create(bdContext);
         mScript = new ScriptC_renderscript(mRS);
 
@@ -106,11 +107,12 @@ public class Simulation extends AsyncTask<Void, String, Void> {
 
     //*********** MAIN LOOP *************
     public void run() {
-        publishProgress("Initialising ...\n");
+        publishProgress("Initialising ... \n");
         Log.d(LOGID, "Starting run code ...");
         simstate = 1;
         {{ idx_initialisations }}
-        publishProgress("Running simulation ...\n");
+        {{ monitor_listing }}
+        publishProgress("Running simulation ... ");
         long sim_start = System.currentTimeMillis();
         for (t=0; t<_duration; t+=dt) {
             mScript.set_t(t);
@@ -120,10 +122,14 @@ public class Simulation extends AsyncTask<Void, String, Void> {
         runtimeDuration = System.currentTimeMillis()-sim_start;
         Log.d(LOGID, "DONE!");
         // NOTE: Spike monitor name is not handled by template
-        publishProgress(gp_spikemonitor.nspikes+" spikes fired.\n");
-        publishProgress("Saving recorded spikes ... ");
-        gp_spikemonitor.writeToFile("gp_spikemonitor.txt");
-        publishProgress("DONE!\n");
+        if (monitors.size() > 0) {
+            for (SpikeMonitor mon : monitors) {
+                publishProgress("Neuron group "+mon.groupName+" fired "+mon.nspikes+".\n");
+                publishProgress("Saving recorded spikes ... ");
+                mon.writeToFile(mon.groupName+"_spikemonitor.txt");
+                publishProgress("DONE!\n");
+            }
+        }
         publishProgress("Main loop run time: "+runtimeDuration+" ms\n");
         simstate = 2;
     }

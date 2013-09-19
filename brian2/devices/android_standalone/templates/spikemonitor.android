@@ -1,12 +1,19 @@
 {% macro monitor_declaration() %}
         {% if owner is defined %}
-        SpikeMonitor {{owner.source.name}}_spikemonitor = new SpikeMonitor();
+        SpikeMonitor {{owner.source.name}}_spikemonitor = new SpikeMonitor("{{owner.source.name}}");
+        {% endif %}
+{% endmacro %}
+
+{% macro monitor_listing() %}
+        {% if owner is defined %}
+        monitors.add({{owner.source.name}}_spikemonitor);
         {% endif %}
 {% endmacro %}
 
 {% macro java_code() %}
 
             {% if owner is defined %}
+            _array_{{owner.source.name}}__spikespace_alloc.copyTo(_array_{{owner.source.name}}__spikespace);
             {{owner.source.name}}_spikemonitor.addSpikes(_array_{{owner.source.name}}__spikespace.clone(), t);
             {% endif %}
 
