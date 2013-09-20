@@ -120,10 +120,11 @@ public class Simulation extends AsyncTask<Void, String, Void> {
         }
         publishProgress("Simulation complete!\n");
         runtimeDuration = System.currentTimeMillis()-sim_start;
-        Log.d(LOGID, "DONE!");
+        Log.d(LOGID, "finished main simulation run");
         // NOTE: Spike monitor name is not handled by template
         if (monitors.size() > 0) {
             for (SpikeMonitor mon : monitors) {
+                Log.d(LOGID, "Saving monitor "+mon.groupName);
                 publishProgress("Neuron group "+mon.groupName+" fired "+mon.nspikes+".\n");
                 publishProgress("Saving recorded spikes ... ");
                 mon.writeToFile(mon.groupName+"_spikemonitor.txt");
@@ -132,8 +133,7 @@ public class Simulation extends AsyncTask<Void, String, Void> {
         }
         publishProgress("Main loop run time: "+runtimeDuration+" ms\n");
         simstate = 2;
+        Log.d(LOGID, "Exiting simulation.");
     }
-
-
 
 }
