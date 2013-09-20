@@ -28,7 +28,9 @@ private void _bind_allocations() {
     {% for (varname, dtype_spec, N) in array_specs %}
     {{varname}}_alloc = Allocation.createSized(mRS, Element.{{dtype_spec.allocation}}(mRS), {{N}});
     mScript.bind_{{varname}}({{varname}}_alloc);
+    {% if dtype_spec.java != "boolean" %}
     {{varname}}_alloc.copyFrom({{varname}});
+    {% endif %}
     {% endfor %}
 }
 
