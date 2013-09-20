@@ -5,9 +5,9 @@ Network: 1000 unconnected integrate-and-fire neurons (leaky IF)
 with an input parameter v0.
 The input is set differently for each neuron.
 '''
-from pylab import *
+from numpy import *
 from brian2 import *
-from brian2.codegen.languages import *
+from brian2.devices.android_standalone import *
 
 set_device('android')
 N = 1000
@@ -23,6 +23,6 @@ group.v = 0 * mV
 group.v0 = linspace(0 * mV, 20 * mV, N)
 monitor = SpikeMonitor(group)
 mynetwork = Network(group, monitor, name="Test")
-mynetwork.generate_code()
-print("Code generation complete!")
+mynetwork.run(0*second)
+build(mynetwork)
 

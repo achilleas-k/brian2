@@ -1,5 +1,8 @@
+from numpy import *
 from brian2 import *
-from brian2.codegen.languages import *
+from brian2.devices.android_standalone import *
+
+set_device('android')
 
 N = 100
 
@@ -25,10 +28,10 @@ dn/dt = 0.032*(mV**-1)*(15.*mV-v+VT)/
 dh/dt = 0.128*exp((17.*mV-v+VT)/(18.*mV))/ms*(1.-h)-4./(1+exp((40.*mV-v+VT)/(5.*mV)))/ms*h : 1
 I : amp
 ''')
-nrngroup = NeuronGroup(N, model=eqs, threshold='not_refractory and (v>-40*mV)',
-        refractory='v>-40*mV', name="mynrngroup", codeobj_class=JavaCodeObject)
+nrngroup = NeuronGroup(N, model=eqs, threshold='v>-40*mV',
+        refractory='v>-40*mV', name="mynrngroup")
 mynetwork = Network(nrngroup, name="Test")
-
-mynetwork.generate_code()
+mynetwork.run(0*second)
+build(mynetwork)
 
 
