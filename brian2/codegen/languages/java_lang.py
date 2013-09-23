@@ -1,6 +1,3 @@
-'''
-TODO: use preferences to get arguments to Language
-'''
 import numpy
 
 from brian2.utils.stringtools import (deindent, stripped_deindented_lines,
@@ -29,7 +26,11 @@ def java_data_type(dtype):
     Java has no unsigned types, so if an unsigned datatypes is requested
     the next largest type is used instead.
 
-    Each
+    Each dtype argument returns a dictionary containing three types:
+        'java'        : the corresponding data type for base Java
+        'renderscript': the corresponding data type for RenderScript/C99
+        'allocation'  : the corresponding data type for Android Allocation objects,
+                        which are responsible for memory binding between Java and RS.
     '''
     if dtype == numpy.int:
         dtype = {'java': 'int', 'renderscript': 'int32_t', 'allocation': 'I32'}
@@ -89,22 +90,6 @@ class JavaLanguage(Language):
     '''
     Java language
 
-    Java code templates should provide Jinja2 macros with the following names:
-
-    ``main``
-        The main loop.
-    ``support_code``
-        The support code (function definitions, etc.), compiled in a separate
-        file.
-
-    For user-defined functions, there are two keys to provide:
-
-    ``support_code``
-        The function definition which will be added to the support code.
-    ``hashdefine_code``
-        The ``#define`` code added to the main loop.
-
-    See `TimedArray` for an example of these keys.
     '''
 
     language_id = 'java'

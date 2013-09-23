@@ -1,3 +1,12 @@
+'''
+Java runtime code object
+
+This was used during development of BrianDROID for Android code generation.
+There is no Java runtime code generation in Brian2 and all the functionality
+that this file provided has been correctly moved to the ``devices`` module.
+
+This file is scheduled for demolition.
+'''
 import os
 import numpy
 
