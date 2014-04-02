@@ -4,6 +4,12 @@ User's guide
 .. toctree::
    :maxdepth: 2
 
+   models
    equations
-   functions
    refractoriness
+   synapses
+   input
+   scheduling
+   functions
+   devices
+   

@@ -99,12 +99,13 @@ def _encode(text):
     ''' Small helper function to encode unicode strings as UTF-8. ''' 
     return text.encode('UTF-8')
 
-# get the root logger
-logger = logging.getLogger('')
+# get the main logger
+logger = logging.getLogger('brian2')
+logger.propagate = False
 logger.setLevel(logging.DEBUG)
 
 # Log to a file
-TMP_LOG = None
+TMP_LOG = FILE_HANDLER = None
 if brian_prefs['logging.file_log']:    
     try:
         # Temporary filename used for logging
@@ -149,12 +150,19 @@ CONSOLE_HANDLER.setFormatter(logging.Formatter('%(levelname)-8s %(name)s: %(mess
 logger.addHandler(CONSOLE_HANDLER)
 
 # We want to log all warnings
-if hasattr(logging, 'captureWarnings'):
-    # This function was added in Python 2.7
+if hasattr(logging, 'captureWarnings'):  # This function was added in Python 2.7
     logging.captureWarnings(True) # pylint: disable=E1101
+    # Manually connect to the warnings logger so that the warnings end up in
+    # the log file. Note that connecting to the console handler here means
+    # duplicated warning messages in the ipython notebook, but not doing so
+    # would mean that they are not displayed at all in the standard ipython
+    # interface...
+    warn_logger = logging.getLogger('py.warnings')
+    warn_logger.addHandler(CONSOLE_HANDLER)
+    if FILE_HANDLER is not None:
+        warn_logger.addHandler(FILE_HANDLER)
 
 # Put some standard info into the log file
-logger = logging.getLogger('brian2')
 logger.debug('Logging to file: %s, copy of main script saved as: %s' %
              (TMP_LOG, TMP_SCRIPT))
 logger.debug('Python interpreter: %s' % sys.executable)
@@ -170,13 +178,10 @@ for _name, _version in version_infos.iteritems():
                                                        version=str(_version)))
 
 
-UNHANDLED_ERROR_MESSAGE = ('Brian encountered an unexpected error. '
-'If you think this is bug in Brian, please report this issue either to the '
-'mailing list at <http://groups.google.com/group/brian-support/>, '
-'or to the issue tracker at <http://neuralensemble.org/trac/brian/report>. '
-'Please include this file with debug information in your report: {logfile} '
-' Additionally, you can also include a copy of the script that was run, '
-'available at: {filename} Thanks!').format(logfile=TMP_LOG, filename=TMP_SCRIPT)
+UNHANDLED_ERROR_MESSAGE = ('Brian 2 encountered an unexpected error. '
+'If you think this is bug in Brian 2, please report this issue either to the '
+'mailing list at <http://groups.google.com/group/brian-development/>, '
+'or to the issue tracker at <https://github.com/brian-team/brian2/issues>.')
 
 
 def brian_excepthook(exc_type, exc_obj, exc_tb):
@@ -184,10 +189,24 @@ def brian_excepthook(exc_type, exc_obj, exc_tb):
     Display a message mentioning the debug log in case of an uncaught
     exception.
     '''
+    # Do not catch Ctrl+C
+    if exc_type == KeyboardInterrupt:
+        return
     BrianLogger.exception_occured = True
-    
-    logger.error(UNHANDLED_ERROR_MESSAGE,
-                 exc_info=(exc_type, exc_obj, exc_tb))
+
+    message = UNHANDLED_ERROR_MESSAGE
+    if TMP_LOG is not None:
+        message += (' Please include this file with debug information in your '
+                    'report: {} ').format(TMP_LOG)
+    if TMP_SCRIPT is not None:
+        message += (' Additionally, you can also include a copy '
+                    'of the script that was run, available '
+                    'at: {}').format(TMP_SCRIPT)
+
+    message += ' Thanks!'  # very important :)
+
+    logger.error(message, exc_info=(exc_type, exc_obj, exc_tb))
+
 
 def clean_up_logging():
     '''
@@ -533,12 +552,15 @@ class LogCapture(logging.Handler):
     `~brian2.utils.logger.catch_logs` to allow testing in a similar
     way as with `warnings.catch_warnings`.
     '''
-    
+    captured_loggers = ['brian2', 'py.warnings']
+
     def __init__(self, log_list, log_level=logging.WARN):
         logging.Handler.__init__(self, level=log_level)
         self.log_list = log_list
         # make a copy of the previous handlers
-        self.old_handlers = list(logging.getLogger().handlers)
+        self.handlers = {}
+        for logger_name in LogCapture.captured_loggers:
+            self.handlers[logger_name] = list(logging.getLogger(logger_name).handlers)
         self.install()
 
     def emit(self, record):
@@ -551,19 +573,18 @@ class LogCapture(logging.Handler):
         Install this handler to catch all warnings. Temporarily disconnect all
         other handlers.
         '''
-        the_logger = logging.getLogger()
-        for handler in self.old_handlers:
-            the_logger.removeHandler(handler)
-        # make sure everything gets logged by the root logger
-        the_logger.setLevel(logging.DEBUG)
-        the_logger.addHandler(self)
+        for logger_name in LogCapture.captured_loggers:
+            the_logger = logging.getLogger(logger_name)
+            for handler in self.handlers[logger_name]:
+                the_logger.removeHandler(handler)
+            the_logger.addHandler(self)
     
     def uninstall(self):
         '''
         Uninstall this handler and re-connect the previously installed
         handlers.
         '''
-        the_logger = logging.getLogger()
-        the_logger.removeHandler(self)
-        for handler in self.old_handlers:
-            the_logger.addHandler(handler)
+        for logger_name in LogCapture.captured_loggers:
+            the_logger = logging.getLogger(logger_name)
+            for handler in self.handlers[logger_name]:
+                the_logger.addHandler(handler)

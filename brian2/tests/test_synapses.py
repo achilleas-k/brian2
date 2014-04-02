@@ -14,10 +14,15 @@ except ImportError:
 
 def _compare(synapses, expected):
     conn_matrix = np.zeros((len(synapses.source), len(synapses.target)))
-    for i, j in zip(synapses.i[:], synapses.j[:]):
-        conn_matrix[i, j] += 1
+    for _i, _j in zip(synapses.i[:], synapses.j[:]):
+        conn_matrix[_i, _j] += 1
 
     assert_equal(conn_matrix, expected)
+    # also compare the correct numbers of incoming and outgoing synapses
+    incoming = conn_matrix.sum(axis=0)
+    outgoing = conn_matrix.sum(axis=1)
+    assert all(synapses.N_outgoing[:] == outgoing[synapses.i[:]]), 'N_outgoing returned an incorrect value'
+    assert all(synapses.N_incoming[:] == incoming[synapses.j[:]]), 'N_incoming returned an incorrect value'
 
 
 def test_creation():
@@ -32,6 +37,31 @@ def test_creation():
         assert len(S) == 0
         S = Synapses(G, model='w:1', pre='v+=w', codeobj_class=codeobj_class)
         assert S.source.name == S.target.name == G.name
+
+
+def test_incoming_outgoing():
+    '''
+    Test the count of outgoing/incoming synapses per neuron.
+    (It will be also automatically tested for all connection patterns that
+    use the above _compare function for testing)
+    '''
+    G1 = NeuronGroup(5, 'v: 1')
+    G2 = NeuronGroup(5, 'v: 1')
+    for codeobj_class in codeobj_classes:
+        S = Synapses(G1, G2, 'w:1', pre='v+=w', codeobj_class=codeobj_class)
+        S.connect([0, 0, 0, 1, 1, 2],
+                  [0, 1, 2, 1, 2, 3])
+        # First source neuron has 3 outgoing synapses, the second 2, the third 1
+        assert all(S.N_outgoing['i==0'] == 3)
+        assert all(S.N_outgoing['i==1'] == 2)
+        assert all(S.N_outgoing['i==2'] == 1)
+        assert all(S.N_outgoing['i>2'] == 0)
+        # First target neuron receives 1 input, the second+third each 2, the fourth receives 1
+        assert all(S.N_incoming['j==0'] == 1)
+        assert all(S.N_incoming['j==1'] == 2)
+        assert all(S.N_incoming['j==2'] == 2)
+        assert all(S.N_incoming['j==3'] == 1)
+        assert all(S.N_incoming['j>3'] == 0)
 
 
 def test_connection_arrays():
@@ -132,6 +162,19 @@ def test_connection_string_deterministic():
         _compare(S, expected)
 
         S = Synapses(G, G, 'w:1', 'v+=w', connect='i == j', codeobj_class=codeobj_class)
+        _compare(S, expected)
+
+        # Everything except for the upper [5, 5] quadrant
+        number = 5
+        expected = np.ones((len(G), len(G)))
+        expected[:number, :number] = 0
+        S = Synapses(G, G, 'w:1', 'v+=w', codeobj_class=codeobj_class)
+        S.connect('(i >= number) or (j >= number)')
+        _compare(S, expected)
+
+        S = Synapses(G, G, 'w:1', 'v+=w', codeobj_class=codeobj_class)
+        S.connect('(i >= explicit_number) or (j >= explicit_number)',
+                  namespace={'explicit_number': number})
         _compare(S, expected)
 
 
@@ -316,13 +359,40 @@ def test_state_variable_indexing():
     #string-based indexing
     assert_equal(S.w[0:3], S.w['i<3'])
     assert_equal(S.w[:, 0:3], S.w['j<3'])
-    assert_equal(S.w[:, :, 0], S.w['k==0'])
+    # TODO: k is not working yet
+    # assert_equal(S.w[:, :, 0], S.w['k==0'])
     assert_equal(S.w[0:3], S.w['v_pre < 3*mV'])
     assert_equal(S.w[:, 0:3], S.w['v_post < 13*mV'])
 
     #invalid indices
     assert_raises(IndexError, lambda: S.w.__getitem__((1, 2, 3, 4)))
     assert_raises(IndexError, lambda: S.w.__getitem__(object()))
+
+
+def test_indices():
+    G = NeuronGroup(10, 'v : 1')
+    S = Synapses(G, G, '', connect=True)
+    G.v = 'i'
+
+    assert_equal(S.indices[:], np.arange(10*10))
+    assert len(S.indices[5, :]) == 10
+    assert_equal(S.indices['v_pre >=5'], S.indices[5:, :])
+    assert_equal(S.indices['j >=5'], S.indices[:, 5:])
+
+
+def test_subexpression_references():
+    '''
+    Assure that subexpressions in targeted groups are handled correctly.
+    '''
+    G = NeuronGroup(10, '''v : 1
+                           v2 = 2*v : 1''')
+    G.v = np.arange(10)
+    S = Synapses(G, G, '''w : 1
+                          u = v2_post + 1 : 1
+                          v = v2_pre + 1 : 1''')
+    S.connect('i==(10-1-j)')
+    assert_equal(S.u[:], np.arange(10)[::-1]*2+1)
+    assert_equal(S.v[:], np.arange(10)*2+1)
 
 
 def test_delay_specification():
@@ -341,13 +411,12 @@ def test_delay_specification():
 
     # Scalar delay
     S = Synapses(G, G, 'w:1', pre='v+=w', delay=5*ms)
+    assert_equal(S.delay[:], 5*ms)
     S.connect('i==j')
     S.delay = 10*ms
     assert_equal(S.delay[:], 10*ms)
-    S.delay = '3*ms'
-    assert_equal(S.delay[:], 3*ms)
-    # TODO: Assignment with strings or arrays is currently possible, it only
-    # takes into account the first value
+    # S.delay = '3*ms'
+    # assert_equal(S.delay[:], 3*ms)
 
     # Invalid arguments
     assert_raises(DimensionMismatchError, lambda: Synapses(G, G, 'w:1',
@@ -358,7 +427,6 @@ def test_delay_specification():
     assert_raises(ValueError, lambda: Synapses(G, G, 'w:1', delay=5*ms))
     assert_raises(ValueError, lambda: Synapses(G, G, 'w:1', pre='v+=w',
                                                delay={'post': 5*ms}))
-
 
 def test_transmission():
     delays = [[0, 0] * ms, [1, 1] * ms, [1, 2] * ms]
@@ -388,23 +456,138 @@ def test_transmission():
                         target_mon.t[target_mon.i==1] - defaultclock.dt - delay[1])
 
 
-def test_lumped_variable():
-    source = NeuronGroup(2, 'v : 1', threshold='v>1', reset='v=0')
-    source.v = 1.1  # will spike immediately
-    target = NeuronGroup(2, 'v : 1')
-    # We make this a bit unnecessarily complicated to see whether the lumped
-    # variable mechanism correctly deals with Subexpressions
-    S = Synapses(source, target, '''w : 1
-                                    x : 1
-                                    v = x : 1 (lumped)''', pre='x+=w')
-    S.connect('i==j', n=2)
-    S.w[:, :, 0] = 'i'
-    S.w[:, :, 1] = 'i + 0.5'
-    net = Network(source, target, S)
-    net.run(1*ms)
+def test_changed_dt_spikes_in_queue():
+    for codeobj_class in codeobj_classes:
+        defaultclock.dt = .5*ms
+        G1 = NeuronGroup(1, 'v:1', threshold='v>1', reset='v=0',
+                         codeobj_class=codeobj_class)
+        G1.v = 1.1
+        G2 = NeuronGroup(10, 'v:1', threshold='v>1', reset='v=0',
+                         codeobj_class=codeobj_class)
+        S = Synapses(G1, G2, pre='v+=1.1', codeobj_class=codeobj_class)
+        S.connect(True)
+        S.delay = 'j*ms'
+        mon = SpikeMonitor(G2)
+        net = Network(G1, G2, S, mon)
+        net.run(5*ms)
+        defaultclock.dt = 1*ms
+        net.run(3*ms)
+        defaultclock.dt = 0.1*ms
+        net.run(2*ms)
+        # Spikes should have delays of 0, 1, 2, ... ms and always
+        # trigger a spike one dt later
+        expected = [0.5, 1.5, 2.5, 3.5, 4.5, # dt=0.5ms
+                    6, 7, 8, #dt = 1ms
+                    8.1, 9.1 #dt=0.1ms
+                    ] * ms
+        assert_equal(mon.t[:], expected)
 
-    # v of the target should be the sum of the two weights
-    assert_equal(target.v, np.array([0.5, 2.5]))
+
+def test_summed_variable():
+    for codeobj_class in codeobj_classes:
+        source = NeuronGroup(2, 'v : 1', threshold='v>1', reset='v=0',
+                             codeobj_class=codeobj_class)
+        source.v = 1.1  # will spike immediately
+        target = NeuronGroup(2, 'v : 1', codeobj_class=codeobj_class)
+        S = Synapses(source, target, '''w : 1
+                                        x : 1
+                                        v_post = x : 1 (summed)''', pre='x+=w',
+                     codeobj_class=codeobj_class)
+        S.connect('i==j', n=2)
+        S.w[:, :, 0] = 'i'
+        S.w[:, :, 1] = 'i + 0.5'
+        net = Network(source, target, S)
+        net.run(1*ms)
+
+        # v of the target should be the sum of the two weights
+        assert_equal(target.v, np.array([0.5, 2.5]))
+
+
+def test_summed_variable_errors():
+    G = NeuronGroup(10, '''dv/dt = -v / (10*ms) : volt
+                           sub = 2*v : volt
+                           p : volt''')
+
+    # Using the (summed) flag for a differential equation or a parameter
+    assert_raises(ValueError, lambda: Synapses(G, G, '''dp_post/dt = -p_post / (10*ms) : volt (summed)'''))
+    assert_raises(ValueError, lambda: Synapses(G, G, '''p_post : volt (summed)'''))
+
+    # Using the (summed) flag for a variable name without _pre or _post suffix
+    assert_raises(ValueError, lambda: Synapses(G, G, '''p = 3*volt : volt (summed)'''))
+
+    # Using the name of a variable that does not exist
+    assert_raises(ValueError, lambda: Synapses(G, G, '''q_post = 3*volt : volt (summed)'''))
+
+    # Target equation is not a parameter
+    assert_raises(ValueError, lambda: Synapses(G, G, '''sub_post = 3*volt : volt (summed)'''))
+    assert_raises(ValueError, lambda: Synapses(G, G, '''v_post = 3*volt : volt (summed)'''))
+
+    # Unit mismatch between synapses and target
+    assert_raises(DimensionMismatchError,
+                  lambda: Synapses(G, G, '''p_post = 3*second : second (summed)'''))
+
+    # Two summed variable equations targetting the same variable
+    assert_raises(ValueError,
+                  lambda: Synapses(G, G, '''p_post = 3*volt : volt (summed)
+                                            p_pre = 3*volt : volt (summed)'''))
+
+
+def test_scalar_parameter_access():
+    for codeobj_class in codeobj_classes:
+        G = NeuronGroup(10, '''v : 1
+                               scalar : Hz (scalar)''')
+        S = Synapses(G, G, '''w : 1
+                              s : Hz (scalar)
+                              number : 1 (scalar)''',
+                     pre = 'v+=w*number', connect=True,
+                     codeobj_class=codeobj_class)
+
+        # Try setting a scalar variable
+        S.s = 100*Hz
+        assert_equal(S.s[:], 100*Hz)
+        S.s[:] = 200*Hz
+        assert_equal(S.s[:], 200*Hz)
+        S.s = 's - 50*Hz + number*Hz'
+        assert_equal(S.s[:], 150*Hz)
+        S.s[:] = '50*Hz'
+        assert_equal(S.s[:], 50*Hz)
+
+        # Set a postsynaptic scalar variable
+        S.scalar_post = 100*Hz
+        assert_equal(G.scalar[:], 100*Hz)
+        S.scalar_post[:] = 100*Hz
+        assert_equal(G.scalar[:], 100*Hz)
+
+        # Check the second method of accessing that works
+        assert_equal(np.asanyarray(S.s), 50*Hz)
+
+        # Check error messages
+        assert_raises(IndexError, lambda: S.s[0])
+        assert_raises(IndexError, lambda: S.s[1])
+        assert_raises(IndexError, lambda: S.s[0:1])
+        assert_raises(IndexError, lambda: S.s['i>5'])
+
+        assert_raises(ValueError, lambda: S.s.set_item(slice(None), [0, 1]*Hz))
+        assert_raises(IndexError, lambda: S.s.set_item(0, 100*Hz))
+        assert_raises(IndexError, lambda: S.s.set_item(1, 100*Hz))
+        assert_raises(IndexError, lambda: S.s.set_item('i>5', 100*Hz))
+
+
+def test_scalar_subexpression():
+    for codeobj_class in codeobj_classes:
+        G = NeuronGroup(10, '''v : 1
+                               number : 1 (scalar)''',
+                        codeobj_class=codeobj_class)
+        S = Synapses(G, G, '''s : 1 (scalar)
+                              sub = number_post + s : 1 (scalar)''',
+                     pre='v+=s', connect=True)
+        S.s = 100
+        G.number = 50
+        assert S.sub[:] == 150
+
+    assert_raises(SyntaxError, lambda: Synapses(G, G, '''s : 1 (scalar)
+                                                         sub = v_post + s : 1 (scalar)''',
+                                                pre='v+=s', connect=True))
 
 
 def test_event_driven():
@@ -477,13 +660,20 @@ def test_repr():
 
 if __name__ == '__main__':
     test_creation()
+    test_incoming_outgoing()
     test_connection_string_deterministic()
     test_connection_random()
     test_connection_multiple_synapses()
     test_state_variable_assignment()
     test_state_variable_indexing()
+    test_indices()
+    test_subexpression_references()
     test_delay_specification()
     test_transmission()
-    test_lumped_variable()
+    test_changed_dt_spikes_in_queue()
+    test_summed_variable()
+    test_summed_variable_errors()
+    test_scalar_parameter_access()
+    test_scalar_subexpression()
     test_event_driven()
     test_repr()

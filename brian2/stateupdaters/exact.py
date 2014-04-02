@@ -1,21 +1,18 @@
 '''
 Exact integration for linear equations.
 '''
+import itertools
 
-import operator
-
-from sympy import Wild, Symbol, Float
+from sympy import Wild, Symbol
 import sympy as sp
 
 from brian2.parsing.sympytools import sympy_to_str
-from brian2.utils.stringtools import get_identifiers
 from brian2.utils.logger import get_logger
 from brian2.stateupdaters.base import StateUpdateMethod
 
 __all__ = ['linear', 'independent']
 
 logger = get_logger(__name__)
-
 
 def get_linear_system(eqs):
     '''
@@ -42,35 +39,35 @@ def get_linear_system(eqs):
     diff_eq_names = eqs.diff_eq_names
     
     symbols = [Symbol(name, real=True) for name in diff_eq_names]
-    # Coefficients
-    wildcards = [Wild('c_' + name, exclude=symbols) for name in diff_eq_names]
-    
-    #Additive constant
-    constant_wildcard = Wild('c', exclude=symbols)
-    
-    pattern = reduce(operator.add, [c * s for c, s in zip(wildcards, symbols)])
-    pattern += constant_wildcard
     
     coefficients = sp.zeros(len(diff_eq_names))
-    constants = sp.zeros((len(diff_eq_names), 1))
-    
+    constants = sp.zeros(len(diff_eq_names), 1)
+
     for row_idx, (name, expr) in enumerate(diff_eqs):
         s_expr = expr.sympy_expr.expand()
-        pattern_matches = s_expr.match(pattern)
-        if pattern_matches is None:
-            raise ValueError(('The expression "%s", defining the variable %s, '
-                             'could not be separated into linear components') %
-                             (expr, name))
-        
-        for col_idx in xrange(len(diff_eq_names)):
-            coefficients[row_idx, col_idx] = pattern_matches[wildcards[col_idx]]
-        
-        constants[row_idx] = pattern_matches[constant_wildcard]
+
+        current_s_expr = s_expr
+        for col_idx, (name, symbol) in enumerate(zip(eqs.diff_eq_names, symbols)):
+            current_s_expr = current_s_expr.collect(symbol)
+            constant_wildcard = Wild('c', exclude=[symbol])
+            factor_wildcard = Wild('c_'+name, exclude=symbols)
+            one_pattern = factor_wildcard*symbol + constant_wildcard
+            matches = current_s_expr.match(one_pattern)
+            if matches is None:
+                raise ValueError(('The expression "%s", defining the variable %s, '
+                                 'could not be separated into linear components') %
+                                 (expr, name))
+
+            coefficients[row_idx, col_idx] = matches[factor_wildcard]
+            current_s_expr = matches[constant_wildcard]
+
+        # The remaining constant should be a true constant
+        constants[row_idx] = current_s_expr
 
     return (diff_eq_names, coefficients, constants)
 
 
-def _non_constant_symbols(symbols, variables):
+def _non_constant_symbols(symbols, variables, t_symbol):
     '''
     Determine whether the given `sympy.Matrix` only refers to constant
     variables. Note that variables that are not present in the `variables`
@@ -83,7 +80,11 @@ def _non_constant_symbols(symbols, variables):
         The symbols to check, e.g. resulting from expression.atoms()
     variables : dict
         The dictionary of `Variable` objects.
-
+    t_symbol : `Symbol`
+        The symbol referring to time ``t`` -- will not be considered as
+        non-constant in this context because it will specifically checked
+        later with `_check_t` (properly taking care of functions that are
+        locally constant over a single time step).
     Returns
     -------
     non_constant : set
@@ -95,7 +96,7 @@ def _non_constant_symbols(symbols, variables):
 
     # Only check true symbols, not numbers
     symbols = set([str(symbol) for symbol in symbols
-                   if isinstance(symbol, Symbol)])
+                   if isinstance(symbol, Symbol) and not symbol == t_symbol])
 
     non_constant = set()
 
@@ -147,8 +148,7 @@ class IndependentStateUpdater(StateUpdateMethod):
         code = []
         for name, expression in diff_eqs:
             rhs = expression.sympy_expr
-            non_constant = _non_constant_symbols(rhs.atoms(),
-                                                 variables) - set([name])
+            non_constant = _non_constant_symbols(rhs.atoms(), variables, t) - set([name])
             if len(non_constant):
                 raise ValueError(('Equation for %s referred to non-constant '
                                   'variables %s') % (name, str(non_constant)))
@@ -160,7 +160,12 @@ class IndependentStateUpdater(StateUpdateMethod):
             rhs = rhs.subs(var, f(t))
             derivative = sp.Derivative(f(t), t)
             diff_eq = sp.Eq(derivative, rhs)
-            general_solution = sp.dsolve(diff_eq, f(t))
+            # TODO: simplify=True sometimes fails with 0.7.4, see:
+            # https://github.com/sympy/sympy/issues/2666
+            try:
+                general_solution = sp.dsolve(diff_eq, f(t), simplify=True)
+            except (RuntimeError, AttributeError):  #AttributeError seems to be raised on Python 2.6
+                general_solution = sp.dsolve(diff_eq, f(t), simplify=False)
             # Check whether this is an explicit solution
             if not getattr(general_solution, 'lhs', None) == f(t):
                 raise ValueError('Cannot explicitly solve: ' + str(diff_eq))
@@ -189,6 +194,22 @@ class IndependentStateUpdater(StateUpdateMethod):
         return '\n'.join(code)
 
 
+def _check_for_locally_constant(expression, variables, dt_value, t_symbol):
+
+    for arg in expression.args:
+        if arg is t_symbol:
+            # We found "t" -- if it is not the only argument of a locally
+            # constant function we bail out
+            func_name = str(expression.func)
+            if not (func_name in variables and
+                        variables[func_name].is_locally_constant(dt_value)):
+                raise ValueError(('t is used in a context where we cannot'
+                                  'guarantee that it can be considered '
+                                  'locally constant.'))
+        else:
+            _check_for_locally_constant(arg, variables, dt_value, t_symbol)
+
+
 class LinearStateUpdater(StateUpdateMethod):    
     '''
     A state updater for linear equations. Derives a state updater step from the
@@ -209,7 +230,7 @@ class LinearStateUpdater(StateUpdateMethod):
         
         # It worked
         return True
-    
+
     def __call__(self, equations, variables=None):
         
         if variables is None:
@@ -221,13 +242,21 @@ class LinearStateUpdater(StateUpdateMethod):
 
         # Make sure that the matrix M is constant, i.e. it only contains
         # external variables or constant variables
+        t = Symbol('t', real=True, positive=True)
         symbols = set.union(*(el.atoms() for el in matrix))
-        non_constant = _non_constant_symbols(symbols, variables)
+        non_constant = _non_constant_symbols(symbols, variables, t)
         if len(non_constant):
             raise ValueError(('The coefficient matrix for the equations '
                               'contains the symbols %s, which are not '
                               'constant.') % str(non_constant))
-        
+
+        # Check for time dependence
+        dt_var = variables.get('dt', None)
+        if dt_var is not None:
+            # This will raise an error if we meet the symbol "t" anywhere
+            # except as an argument of a locally constant function
+            for entry in itertools.chain(matrix, constants):
+                _check_for_locally_constant(entry, variables, dt_var.get_value(), t)
         symbols = [Symbol(variable, real=True) for variable in varnames]
         solution = sp.solve_linear_system(matrix.row_join(constants), *symbols)
         b = sp.ImmutableMatrix([solution[symbol] for symbol in symbols]).transpose()
@@ -250,14 +279,9 @@ class LinearStateUpdater(StateUpdateMethod):
         # replace them with the state variable names 
         abstract_code = []
         for idx, (variable, update) in enumerate(zip(varnames, updates)):
-            rhs = update.subs(_S[idx, 0], variable)
-            identifiers = get_identifiers(sympy_to_str(rhs))
-            for identifier in identifiers:
-                if identifier in variables:
-                    var = variables[identifier]
-                    if var.scalar and var.constant:
-                        float_val = var.get_value()
-                        rhs = rhs.xreplace({Symbol(identifier, real=True): Float(float_val)})
+            rhs = update
+            for row_idx, varname in enumerate(varnames):
+                rhs = rhs.subs(_S[row_idx, 0], varname)
 
             # Do not overwrite the real state variables yet, the update step
             # of other state variables might still need the original values

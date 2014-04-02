@@ -134,9 +134,14 @@ def fail_for_dimension_mismatch(obj1, obj2=None, error_message=None):
         # zero is treated as the neutral element, e.g. in the Python sum
         # builtin) or comparisons like 3 * mV == 0 to return False instead of
         # failing # with a DimensionMismatchError. Note that 3*mV == 0*second
-        # or 3*mV == 0*mV/mV is not allowed, though.
+        # is not allowed, though.
         if ((not isinstance(obj1, Quantity) and np.all(obj1 == 0)) or
             (not isinstance(obj2, Quantity) and np.all(obj2 == 0))):
+            return
+
+        # We do another check here, this should allow Brian1 units to pass as
+        # having the same dimensions as a Brian2 unit
+        if dim1 == dim2:
             return
 
         if error_message is None:
@@ -563,7 +568,7 @@ def get_dimensions(obj):
         isinstance(obj, np.ndarray) and not isinstance(obj, Quantity)):
         return DIMENSIONLESS 
     try:
-        return obj.dimensions
+        return obj.dim
     except AttributeError:
         raise TypeError('Object of type %s does not have dimensions' %
                         type(obj))
@@ -839,14 +844,20 @@ class Quantity(np.ndarray, object):
                                              'information between array and '
                                              'dim keyword',
                                              arr.dim, dim)
-        elif not isinstance(arr, np.ndarray):
+        elif hasattr(arr, 'unit'):
+            subarr.dim = arr.unit.dim
+            if not (dim is None) and not (dim is subarr.dim):
+                raise DimensionMismatchError('Conflicting dimension '
+                                             'information between array and '
+                                             'dim keyword',
+                                             arr.dim, dim)
+        elif not isinstance(arr, (np.ndarray, np.number, numbers.Number)):
             # check whether it is an iterable containing Quantity objects
             try:
                 is_quantity = [isinstance(x, Quantity) for x in _flatten(arr)]
             except TypeError:
                 # Not iterable
                 is_quantity = [False]
-
             if len(is_quantity) == 0:
                 # Empty list
                 dim = DIMENSIONLESS
@@ -1390,12 +1401,11 @@ class Quantity(np.ndarray, object):
     #### COMPARISONS ####
     def _comparison(self, other, message, operation):
         is_scalar = is_scalar_type(other)
+        if not is_scalar and not isinstance(other, np.ndarray):
+            return NotImplemented
         if not is_scalar or not np.isinf(other):
             fail_for_dimension_mismatch(self, other, message)
-        if isinstance(other, np.ndarray) or is_scalar:
-            return operation(np.asarray(self), np.asarray(other))
-        else:
-            return NotImplemented
+        return operation(np.asarray(self), np.asarray(other))
 
     def __lt__(self, other):
         return self._comparison(other, 'LessThan', operator.lt)
@@ -1462,7 +1472,7 @@ class Quantity(np.ndarray, object):
     any = wrap_function_remove_dimensions(np.ndarray.any)
     nonzero = wrap_function_remove_dimensions(np.ndarray.nonzero)
     argmax = wrap_function_remove_dimensions(np.ndarray.argmax)
-    argmin = wrap_function_remove_dimensions(np.ndarray.argmax)
+    argmin = wrap_function_remove_dimensions(np.ndarray.argmin)
     argsort = wrap_function_remove_dimensions(np.ndarray.argsort)
 
     def fill(self, values): # pylint: disable=C0111

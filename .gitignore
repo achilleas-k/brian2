@@ -25,12 +25,4 @@ nosetests.xml
 
 # pycharm project files
 .idea
-
-# vim swap files
-*.swp
-
-tags
-
-# ignored directory
-/ignoreme
-
+/Brian2.egg-info

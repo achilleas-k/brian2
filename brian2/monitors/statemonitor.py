@@ -3,17 +3,16 @@ import collections
 
 import numpy as np
 
-from brian2.core.variables import (Variable, AttributeVariable, ArrayVariable,
-                                   DynamicArrayVariable)
-from brian2.core.base import BrianObject
+from brian2.core.variables import (Variables, Subexpression, get_dtype)
 from brian2.core.scheduler import Scheduler
-from brian2.core.preferences import brian_prefs
-from brian2.devices.device import get_device
-from brian2.units.fundamentalunits import Unit, Quantity, have_same_dimensions
+from brian2.groups.group import Group, CodeRunner
+from brian2.utils.logger import get_logger
+from brian2.units.fundamentalunits import Unit, Quantity
 from brian2.units.allunits import second
-from brian2.groups.group import create_runner_codeobj
 
 __all__ = ['StateMonitor']
+
+logger = get_logger(__name__)
 
 
 class StateMonitorView(object):
@@ -35,16 +34,17 @@ class StateMonitorView(object):
         if not hasattr(self, '_group_attribute_access_active'):
             raise AttributeError
 
+        mon = self.monitor
         if item == 't':
-            return Quantity(self.monitor._t.data.copy(), dim=second.dim)
+            return mon.t
         elif item == 't_':
-            return self.monitor._t.data.copy()
-        elif item in self.monitor.record_variables:
-            unit = self.monitor.variables[item].unit
-            return Quantity(self.monitor._values[item].data.T[self.indices].copy(),
-                            dim=unit.dim)
-        elif item.endswith('_') and item[:-1] in self.monitor.record_variables:
-            return self.monitor._values[item[:-1]].data.T[self.indices].copy()
+            return mon.t_
+        elif item in mon.record_variables:
+            unit = mon.variables[item].unit
+            return Quantity(mon.variables['_recorded_'+item].get_value().T[self.indices],
+                            dim=unit.dim, copy=True)
+        elif item.endswith('_') and item[:-1] in mon.record_variables:
+            return mon.variables['_recorded_'+item[:-1]].get_value().T[self.indices].copy()
         else:
             raise AttributeError('Unknown attribute %s' % item)
 
@@ -53,22 +53,22 @@ class StateMonitorView(object):
         Convert the neuron indices to indices into the stored values. For example, if neurons [0, 5, 10] have been
         recorded, [5, 10] is converted to [1, 2].
         '''
-        if isinstance(item, int):
-            item = self.monitor.source.item_mapping[item]
+        dtype = get_dtype(item)
+        # scalar value
+        if np.issubdtype(dtype, np.int) and not isinstance(item, np.ndarray):
             indices = np.nonzero(self.monitor.indices == item)[0]
             if len(indices) == 0:
-                raise IndexError('Neuron number %d has not been recorded' % item)
+                raise IndexError('Index number %d has not been recorded' % item)
             return indices[0]
 
         if self.monitor.record_all:
             return item
         indices = []
         for index in item:
-            index = self.monitor.source.item_mapping[index]
             if index in self.monitor.indices:
                 indices.append(np.nonzero(self.monitor.indices == index)[0][0])
             else:
-                raise IndexError('Neuron number %d has not been recorded' % index)
+                raise IndexError('Index number %d has not been recorded' % index)
         return np.array(indices)
 
     def __repr__(self):
@@ -78,7 +78,7 @@ class StateMonitorView(object):
                                   monitor=self.monitor.name)
 
 
-class StateMonitor(BrianObject):
+class StateMonitor(Group, CodeRunner):
     '''
     Record values of state variables during a run
     
@@ -144,8 +144,6 @@ class StateMonitor(BrianObject):
         if not scheduler.defined_when:
             scheduler.when = 'end'
 
-        BrianObject.__init__(self, when=scheduler, name=name)
-
         # variables should always be a list of strings
         if variables is True:
             variables = source.equations.names
@@ -158,77 +156,119 @@ class StateMonitor(BrianObject):
         self.record_all = False
         if record is True:
             self.record_all = True
-            record = source.item_mapping[:]
+            record = np.arange(len(source), dtype=np.int32)
         elif record is None or record is False:
             record = np.array([], dtype=np.int32)
         elif isinstance(record, int):
-            record = np.array([source.item_mapping[record]], dtype=np.int32)
+            record = np.array([record], dtype=np.int32)
         else:
-            record = np.array(source.item_mapping[record], dtype=np.int32)
+            record = np.asarray(record, dtype=np.int32)
             
         #: The array of recorded indices
         self.indices = record
-        # create data structures
-        self.reinit()
-        
-        # Setup variables
-        self.variables = {}
-        for varname in variables:
-            var = source.variables[varname]
-            if not (np.issubdtype(var.dtype, np.float64) and
-                        np.issubdtype(np.float64, var.dtype)):
-                raise NotImplementedError(('Cannot record %s with data type '
-                                           '%s, currently only values stored as '
-                                           'doubles can be recorded.') %
-                                          (varname, var.dtype))
-            self.variables[varname] = var
-            self.variables['_recorded_'+varname] = DynamicArrayVariable('_recorded_'+varname,
-                                                                        Unit(1),
-                                                                        self._values[varname],
-                                                                        group_name=self.name)
+        self.n_indices = len(record)
 
-        self.variables['_t'] = DynamicArrayVariable('_t', Unit(1), self._t,
-                                                    group_name=self.name)
-        self.variables['_clock_t'] = AttributeVariable(second, self.clock, 't_')
-        self.variables['_indices'] = ArrayVariable('_indices', Unit(1),
-                                                   self.indices,
-                                                   constant=True)
-
-        self._group_attribute_access_active = True
-
-    def reinit(self):
-        dev = get_device()
-        vars = self.source.variables
-        self._values = dict((v, dev.dynamic_array(self, '_values', (0, len(self.indices)),
-                                                  vars[v].unit,
-                                                  dtype=vars[v].dtype))
-                            for v in self.record_variables)
-        self._t = dev.dynamic_array_1d(self, '_t', 0, second,
-                                       dtype=brian_prefs['core.default_scalar_dtype'])
-        # FIXME: This does not update the variables dictionary with the new
-        # references
-    
-    def before_run(self, namespace):
         # Some dummy code so that code generation takes care of the indexing
         # and subexpressions
         code = ['_to_record_%s = %s' % (v, v)
                 for v in self.record_variables]
         code = '\n'.join(code)
-        recorded_names = ['_recorded_' + name for name in self.record_variables]
-        self.codeobj = create_runner_codeobj(self.source,
-                                             code,
-                                             'statemonitor',
-                                             name=self.name+'_codeobject*',
-                                             needed_variables=recorded_names,
-                                             additional_variables=self.variables,
-                                             additional_namespace=namespace,
-                                             template_kwds={'_variable_names':
-                                                            self.record_variables},
-                                             check_units=False)
-        self.updaters[:] = [self.codeobj.get_updater()]
+
+        CodeRunner.__init__(self, group=self, template='statemonitor',
+                            code=code, name=name,
+                            when=scheduler,
+                            check_units=False)
+
+        # Setup variables
+        self.variables = Variables(self)
+
+        self.variables.add_dynamic_array('t', size=0, unit=second,
+                                         constant=False, constant_size=False)
+        if scheduler.clock is source.clock:
+            self.variables.add_reference('_clock_t', source.variables['t'])
+        else:
+            self.variables.add_attribute_variable('_clock_t', unit=second,
+                                                  obj=scheduler.clock,
+                                                  attribute='t_')
+        self.variables.add_attribute_variable('N', unit=Unit(1),
+                                              dtype=np.int32,
+                                              obj=self, attribute='_N')
+        self.variables.add_array('_indices', size=len(self.indices),
+                                 unit=Unit(1), dtype=self.indices.dtype,
+                                 constant=True, read_only=True)
+        self.variables['_indices'].set_value(self.indices)
+
+        for varname in variables:
+            var = source.variables[varname]
+            if var.scalar and len(self.indices) > 1:
+                logger.warn(('Variable %s is a scalar variable but it will be '
+                             'recorded once for every target.' % varname),
+                            once=True)
+            index = source.variables.indices[varname]
+            self.variables.add_reference(varname, var,
+                                         index=index)
+            if not index in ('_idx', '0') and index not in variables:
+                self.variables.add_reference(index, source.variables[index])
+            # For subexpressions, we also need all referred variables (if they
+            # are not already present, e.g. the t as _clock_t
+            if isinstance(var, Subexpression):
+                for subexpr_varname in var.identifiers:
+                    if subexpr_varname in source.variables:
+                        source_var = source.variables[subexpr_varname]
+                        index = source.variables.indices[subexpr_varname]
+                        if index != '_idx' and index not in variables:
+                            self.variables.add_reference(index,
+                                                         source.variables[index])
+                        if not source_var in self.variables.values():
+                            source_index = source.variables.indices[subexpr_varname]
+                            # `translate_subexpression` will later replace
+                            # the name used in the original subexpression with
+                            # _source_varname
+                            self.variables.add_reference('_source_'+subexpr_varname,
+                                                         source_var,
+                                                         index=source_index)
+            self.variables.add_dynamic_array('_recorded_' + varname,
+                                             size=(0, len(self.indices)),
+                                             unit=var.unit,
+                                             dtype=var.dtype,
+                                             constant=False,
+                                             constant_size=False)
+
+        for varname in self.record_variables:
+            var = self.source.variables[varname]
+            self.variables.add_auxiliary_variable('_to_record_' + varname,
+                                                  unit=var.unit,
+                                                  dtype=var.dtype,
+                                                  scalar=var.scalar)
+
+        self.recorded_variables = dict([(varname,
+                                         self.variables['_recorded_'+varname])
+                                        for varname in self.record_variables])
+        recorded_names = ['_recorded_'+varname
+                          for varname in self.record_variables]
+
+        self.needed_variables = recorded_names
+        self.template_kwds = template_kwds={'_recorded_variables':
+                                            self.recorded_variables}
+        self._N = 0
+        self._enable_group_attributes()
+
+    def __len__(self):
+        return self._N
+
+    def resize(self, new_size):
+        self.variables['t'].resize(new_size)
+
+        for var in self.recorded_variables.values():
+            var.resize((new_size, self.n_indices))
+        self._N = new_size
+
+    def reinit(self):
+        raise NotImplementedError()
 
     def __getitem__(self, item):
-        if isinstance(item, (int, np.ndarray)):
+        dtype = get_dtype(item)
+        if np.issubdtype(dtype, np.int):
             return StateMonitorView(self, item)
         elif isinstance(item, collections.Sequence):
             index_array = np.array(item)
@@ -251,23 +291,14 @@ class StateMonitor(BrianObject):
             raise AttributeError
         if not hasattr(self, '_group_attribute_access_active'):
             raise AttributeError
-
-        # TODO: Decide about the interface
-        if item == 't':
-            return Quantity(self._t.data.copy(), dim=second.dim)
-        elif item == 't_':
-            return self._t.data.copy()
-        elif item in self.record_variables:
+        if item in self.record_variables:
             unit = self.variables[item].unit
-            if have_same_dimensions(unit, 1):
-                return self._values[item].data.T.copy()
-            else:
-                return Quantity(self._values[item].data.T.copy(),
-                                dim=unit.dim)
+            return Quantity(self.variables['_recorded_'+item].get_value().T,
+                            dim=unit.dim, copy=True)
         elif item.endswith('_') and item[:-1] in self.record_variables:
-            return self._values[item[:-1]].data.T.copy()
+            return self.variables['_recorded_'+item[:-1]].get_value().T
         else:
-            raise AttributeError('Unknown attribute %s' % item)
+            return Group.__getattr__(self, item)
 
     def __repr__(self):
         description = '<{classname}, recording {variables} from {source}>'

@@ -11,7 +11,7 @@ from brian2.core.names import Nameable
 
 __all__ = ['BrianObject',
            'clear',
-           'Updater',
+           'weakproxy_with_fallback',
            ]
 
 logger = get_logger(__name__)
@@ -58,7 +58,6 @@ class BrianObject(Nameable):
         
         self._contained_objects = []
         self._code_objects = []
-        self._updaters = []
         
         self._active = True
         
@@ -69,24 +68,11 @@ class BrianObject(Nameable):
     #: Whether or not `MagicNetwork` is invalidated when a new `BrianObject` of this type is created or removed
     invalidates_magic_network = True
     
-    def before_run(self, namespace):
+    def before_run(self, run_namespace=None, level=0):
         '''
-        Optional method to prepare the object before a run. Receives the 
-        `namespace` in which the object should be run (either the locals/globals
-        or an explicitly defined namespace). This namespace has to be passed
-        as an ``additional_namespace`` argument to calls of
-        `CompoundNamespace.resolve` or `CompoundNamespace.resolve_all`. 
-        
-        Called by `Network.before_run` before the main simulation loop is started.
-        Objects such as `NeuronGroup` will generate internal objects such as
-        state updaters in this method, taking into account changes in the
-        namespace or in constant parameter values.
-        
-        Parameters
-        ----------
-        namespace : (str, dict-like)
-            A (name, namespace) tuple with a description and the namespace in
-            which the `BrianObject` should be executed.
+        Optional method to prepare the object before a run.
+
+        TODO
         '''
         pass
     
@@ -97,7 +83,11 @@ class BrianObject(Nameable):
         Called by `Network.after_run` after the main simulation loop terminated.
         '''
         pass
-    
+
+    def run(self):
+        for codeobj in self._code_objects:
+            codeobj()
+
     def reinit(self):
         '''
         Reinitialise the object, called by `Network.reinit`.
@@ -218,15 +208,11 @@ def clear(erase=False):
     gc.collect()
 
 
-class Updater(Nameable):
+def weakproxy_with_fallback(obj):
     '''
-    Used to implement runtime behaviour of a `BrianObject`.
-    
-    Defines a `run` method that is called by `Network`.
+    Attempts to create a `weakproxy` to the object, but falls back to the object if not possible.
     '''
-    def __init__(self, owner):
-        self.owner = weakref.proxy(owner)
-        Nameable.__init__(self, owner.name+'_updater*')
-        
-    def run(self):
-        raise NotImplementedError
+    try:
+        return weakref.proxy(obj)
+    except TypeError:
+        return obj

@@ -2,23 +2,28 @@ import sympy
 import numpy as np
 from numpy.testing.utils import assert_raises, assert_equal, assert_allclose
 
-from brian2.groups.neurongroup import NeuronGroup
 from brian2.core.network import Network
+from brian2.core.preferences import brian_prefs
 from brian2.core.clocks import defaultclock
+from brian2.equations.equations import Equations
+from brian2.groups.group import get_dtype
+from brian2.groups.neurongroup import NeuronGroup
 from brian2.units.fundamentalunits import (DimensionMismatchError,
                                            have_same_dimensions)
 from brian2.units.allunits import second, volt
-from brian2.units.stdunits import ms, mV
+from brian2.units.stdunits import ms, mV, Hz
 from brian2.codegen.runtime.weave_rt import WeaveCodeObject
 from brian2.codegen.runtime.numpy_rt import NumpyCodeObject
+from brian2.utils.logger import catch_logs
 
-# We can only test C++ if weave is availabe
+# We can only test C++ if weave is available
 try:
     import scipy.weave
     codeobj_classes = [NumpyCodeObject, WeaveCodeObject]
 except ImportError:
     # Can't test C++
     codeobj_classes = [NumpyCodeObject]
+
 
 def test_creation():
     '''
@@ -51,9 +56,14 @@ def test_variables():
     '''
     G = NeuronGroup(1, 'dv/dt = -v/(10*ms) : 1')
     assert 'v' in G.variables and 't' in G.variables and 'dt' in G.variables
-    
+    assert 'not_refractory' not in G.variables and 'lastspike' not in G.variables
+
     G = NeuronGroup(1, 'dv/dt = -v/tau + xi*tau**-0.5: 1')
     assert not 'tau' in G.variables and 'xi' in G.variables
+
+    # NeuronGroup with refractoriness
+    G = NeuronGroup(1, 'dv/dt = -v/(10*ms) : 1', refractory=5*ms)
+    assert 'not_refractory' in G.variables and 'lastspike' in G.variables
 
 
 def test_stochastic_variable():
@@ -67,6 +77,29 @@ def test_stochastic_variable():
                         codeobj_class=codeobj_class)
         net = Network(G)
         net.run(defaultclock.dt)
+
+def test_scalar_variable():
+    '''
+    Test the correct handling of scalar variables
+    '''
+    tau = 10*ms
+    for codeobj_class in codeobj_classes:
+        G = NeuronGroup(10, '''E_L : volt (scalar)
+                               s2 : 1 (scalar)
+                               dv/dt = (E_L - v) / tau : volt''',
+                        codeobj_class=codeobj_class)
+        # Setting should work in these ways
+        G.E_L = -70*mV
+        assert_allclose(G.E_L[:], -70*mV)
+        G.E_L[:] = -60*mV
+        assert_allclose(G.E_L[:], -60*mV)
+        G.E_L = 'E_L + s2*mV - 10*mV'
+        assert_allclose(G.E_L[:], -70*mV)
+        G.E_L[:] = '-75*mV'
+        assert_allclose(G.E_L[:], -75*mV)
+        net = Network(G)
+        net.run(defaultclock.dt)
+
 
 def test_unit_errors():
     '''
@@ -99,6 +132,7 @@ def test_incomplete_namespace():
         tau = 10*ms
         net = Network(G)
         net.run(1*ms)
+        del tau
 
 def test_namespace_errors():
     
@@ -119,6 +153,27 @@ def test_namespace_errors():
                         codeobj_class=codeobj_class)
         net = Network(G)
         assert_raises(KeyError, lambda: net.run(1*ms))
+
+
+def test_namespace_warnings():
+    G = NeuronGroup(1, '''x : 1
+                          y : 1''')
+    # conflicting variable in namespace
+    y = 5
+    with catch_logs() as l:
+        G.x = 'y'
+        assert len(l) == 1
+        assert l[0][1].endswith('.resolution_conflict')
+
+    # conflicting variables with special meaning
+    i = 5
+    N = 3
+    with catch_logs() as l:
+        G.x = 'i / N'
+        assert len(l) == 2
+        assert l[0][1].endswith('.resolution_conflict')
+        assert l[1][1].endswith('.resolution_conflict')
+
 
 def test_threshold_reset():
     '''
@@ -207,87 +262,242 @@ def test_state_variables():
     '''
     Test the setting and accessing of state variables.
     '''
-    G = NeuronGroup(10, 'v : volt')
-    G.v = -70*mV
-    assert_raises(DimensionMismatchError, lambda: G.__setattr__('v', -70))
-    G.v_ = float(-70*mV)
-    # Numpy methods should be able to deal with state variables
-    # (discarding units)
-    assert_allclose(np.mean(G.v), float(-70*mV))
-    # Getting the content should return a Quantity object which then natively
-    # supports numpy functions that access a method
-    assert_allclose(np.mean(G.v[:]), -70*mV)
+    for codeobj_class in codeobj_classes:
+        G = NeuronGroup(10, 'v : volt', codeobj_class=codeobj_class)
 
-    # You should also be able to set variables with a string
-    G.v = '-70*mV + i*mV'
-    assert_allclose(G.v[0], -70*mV)
-    assert_allclose(G.v[9], -61*mV)
-    assert_allclose(G.v[:], -70*mV + np.arange(10)*mV)
+        # The variable N should be always present
+        assert G.N == 10
+        # But it should be read-only
+        assert_raises(TypeError, lambda: G.__setattr__('N', 20))
+        assert_raises(TypeError, lambda: G.__setattr__('N_', 20))
 
-    # And it should raise an unit error if the units are incorrect
-    assert_raises(DimensionMismatchError,
-                  lambda: G.__setattr__('v', '70 + i'))
-    assert_raises(DimensionMismatchError,
-                  lambda: G.__setattr__('v', '70 + i*mV'))
+        G.v = -70*mV
+        assert_raises(DimensionMismatchError, lambda: G.__setattr__('v', -70))
+        G.v_ = float(-70*mV)
+        # Numpy methods should be able to deal with state variables
+        # (discarding units)
+        assert_allclose(np.mean(G.v), float(-70*mV))
+        # Getting the content should return a Quantity object which then natively
+        # supports numpy functions that access a method
+        assert_allclose(np.mean(G.v[:]), -70*mV)
 
-    # Calculating with state variables should work too
-    assert all(G.v - G.v == 0)
-    assert all(G.v + G.v == 2*G.v)
-    assert all(G.v / 2.0 == 0.5*G.v)
-    assert_equal((-G.v)[:], -G.v[:])
-    assert_equal((+G.v)[:], G.v[:])
+        # You should also be able to set variables with a string
+        G.v = '-70*mV + i*mV'
+        assert_allclose(G.v[0], -70*mV)
+        assert_allclose(G.v[9], -61*mV)
+        assert_allclose(G.v[:], -70*mV + np.arange(10)*mV)
 
-    # And in-place modification should work as well
-    G.v += 10*mV
-    G.v -= 10*mV
-    G.v *= 2
-    G.v /= 2.0
+        # And it should raise an unit error if the units are incorrect
+        assert_raises(DimensionMismatchError,
+                      lambda: G.__setattr__('v', '70 + i'))
+        assert_raises(DimensionMismatchError,
+                      lambda: G.__setattr__('v', '70 + i*mV'))
 
-    # with unit checking
-    assert_raises(DimensionMismatchError, lambda: G.v.__iadd__(3*second))
-    assert_raises(DimensionMismatchError, lambda: G.v.__iadd__(3))
-    assert_raises(DimensionMismatchError, lambda: G.v.__imul__(3*second))
+        # Calculating with state variables should work too
+        # With units
+        assert all(G.v - G.v == 0)
+        assert all(G.v - G.v[:] == 0*mV)
+        assert all(G.v[:] - G.v == 0*mV)
+        assert all(G.v + 70*mV == G.v[:] + 70*mV)
+        assert all(70*mV + G.v == G.v[:] + 70*mV)
+        assert all(G.v + G.v == 2*G.v)
+        assert all(G.v / 2.0 == 0.5*G.v)
+        assert all(1.0 / G.v == 1.0 / G.v[:])
+        assert_equal((-G.v)[:], -G.v[:])
+        assert_equal((+G.v)[:], G.v[:])
+        #Without units
+        assert all(G.v_ - G.v_ == 0)
+        assert all(G.v_ - G.v_[:] == 0)
+        assert all(G.v_[:] - G.v_ == 0)
+        assert all(G.v_ + float(70*mV) == G.v_[:] + float(70*mV))
+        assert all(float(70*mV) + G.v_ == G.v_[:] + float(70*mV))
+        assert all(G.v_ + G.v_ == 2*G.v_)
+        assert all(G.v_ / 2.0 == 0.5*G.v_)
+        assert all(1.0 / G.v_ == 1.0 / G.v_[:])
+        assert_equal((-G.v)[:], -G.v[:])
+        assert_equal((+G.v)[:], G.v[:])
 
-    # in-place modification with strings should not work
-    assert_raises(TypeError, lambda: G.v.__iadd__('string'))
-    assert_raises(TypeError, lambda: G.v.__imul__('string'))
-    assert_raises(TypeError, lambda: G.v.__idiv__('string'))
-    assert_raises(TypeError, lambda: G.v.__isub__('string'))
+        # And in-place modification should work as well
+        G.v += 10*mV
+        G.v -= 10*mV
+        G.v *= 2
+        G.v /= 2.0
+
+        # with unit checking
+        assert_raises(DimensionMismatchError, lambda: G.v.__iadd__(3*second))
+        assert_raises(DimensionMismatchError, lambda: G.v.__iadd__(3))
+        assert_raises(DimensionMismatchError, lambda: G.v.__imul__(3*second))
+
+        # in-place modification with strings should not work
+        assert_raises(TypeError, lambda: G.v.__iadd__('string'))
+        assert_raises(TypeError, lambda: G.v.__imul__('string'))
+        assert_raises(TypeError, lambda: G.v.__idiv__('string'))
+        assert_raises(TypeError, lambda: G.v.__isub__('string'))
 
 
 def test_state_variable_access():
-    G = NeuronGroup(10, 'v:volt')
-    G.v = np.arange(10) * volt
+    for codeobj_class in codeobj_classes:
+        G = NeuronGroup(10, 'v:volt', codeobj_class=codeobj_class)
+        G.v = np.arange(10) * volt
 
-    assert_equal(np.asarray(G.v[:]), np.arange(10))
-    assert have_same_dimensions(G.v[:], volt)
-    assert_equal(np.asarray(G.v[:]), G.v_[:])
-    # Accessing single elements, slices and arrays
-    assert G.v[5] == 5 * volt
-    assert G.v_[5] == 5
-    assert_equal(G.v[:5], np.arange(5) * volt)
-    assert_equal(G.v_[:5], np.arange(5))
-    assert_equal(G.v[[0, 5]], [0, 5] * volt)
-    assert_equal(G.v_[[0, 5]], np.array([0, 5]))
+        assert_equal(np.asarray(G.v[:]), np.arange(10))
+        assert have_same_dimensions(G.v[:], volt)
+        assert_equal(np.asarray(G.v[:]), G.v_[:])
+        # Accessing single elements, slices and arrays
+        assert G.v[5] == 5 * volt
+        assert G.v_[5] == 5
+        assert_equal(G.v[:5], np.arange(5) * volt)
+        assert_equal(G.v_[:5], np.arange(5))
+        assert_equal(G.v[[0, 5]], [0, 5] * volt)
+        assert_equal(G.v_[[0, 5]], np.array([0, 5]))
 
-    # Illegal indexing
-    assert_raises(IndexError, lambda: G.v[0, 0])
-    assert_raises(IndexError, lambda: G.v_[0, 0])
-    assert_raises(TypeError, lambda: G.v[object()])
-    assert_raises(TypeError, lambda: G.v_[object()])
+        # Illegal indexing
+        assert_raises(IndexError, lambda: G.v[0, 0])
+        assert_raises(IndexError, lambda: G.v_[0, 0])
+        assert_raises(TypeError, lambda: G.v[object()])
+        assert_raises(TypeError, lambda: G.v_[object()])
 
-    # Indexing with strings
-    assert G.v['i==2'] == G.v[2]
-    assert G.v_['i==2'] == G.v_[2]
-    assert_equal(G.v['v >= 3*volt'], G.v[3:])
-    assert_equal(G.v_['v >= 3*volt'], G.v_[3:])
-    # Should also check for units
-    assert_raises(DimensionMismatchError, lambda: G.v['v >= 3'])
-    assert_raises(DimensionMismatchError, lambda: G.v['v >= 3*second'])
+        # A string representation should not raise any error
+        assert len(str(G.v))
+        assert len(repr(G.v))
+        assert len(str(G.v_))
+        assert len(repr(G.v_))
 
-    # A string representation should not raise any error
-    assert len(str(G.v))
-    assert len(repr(G.v))
+
+def test_state_variable_access_strings():
+    for codeobj_class in codeobj_classes:
+        G = NeuronGroup(10, 'v:volt', codeobj_class=codeobj_class)
+        G.v = np.arange(10) * volt
+        # Indexing with strings
+        assert G.v['i==2'] == G.v[2]
+        assert G.v_['i==2'] == G.v_[2]
+        assert_equal(G.v['v >= 3*volt'], G.v[3:])
+        assert_equal(G.v_['v >= 3*volt'], G.v_[3:])
+        # Should also check for units
+        assert_raises(DimensionMismatchError, lambda: G.v['v >= 3'])
+        assert_raises(DimensionMismatchError, lambda: G.v['v >= 3*second'])
+
+        # Setting with strings
+        # --------------------
+        # String value referring to i
+        G.v = '2*i*volt'
+        assert_equal(G.v[:], 2*np.arange(10)*volt)
+        # String value referring to i
+        G.v[:5] = '3*i*volt'
+        assert_equal(G.v[:],
+                     np.array([0, 3, 6, 9, 12, 10, 12, 14, 16, 18])*volt)
+
+        G.v = np.arange(10) * volt
+        # String value referring to a state variable
+        G.v = '2*v'
+        assert_equal(G.v[:], 2*np.arange(10)*volt)
+        G.v[:5] = '2*v'
+        assert_equal(G.v[:],
+                     np.array([0, 4, 8, 12, 16, 10, 12, 14, 16, 18])*volt)
+
+        G.v = np.arange(10) * volt
+        # String value referring to state variables, i, and an external variable
+        ext = 5*volt
+        G.v = 'v + ext + (N + i)*volt'
+        assert_equal(G.v[:], 2*np.arange(10)*volt + 15*volt)
+
+        G.v = np.arange(10) * volt
+        G.v[:5] = 'v + ext + (N + i)*volt'
+        assert_equal(G.v[:],
+                     np.array([15, 17, 19, 21, 23, 5, 6, 7, 8, 9])*volt)
+
+        G.v = 'v + randn()*volt'  # only check that it doesn't raise an error
+        G.v[:5] = 'v + randn()*volt'  # only check that it doesn't raise an error
+
+        G.v = np.arange(10) * volt
+        # String index using a random number
+        G.v['rand() <= 1'] = 0*mV
+        assert_equal(G.v[:], np.zeros(10)*volt)
+
+        G.v = np.arange(10) * volt
+        # String index referring to i and setting to a scalar value
+        G.v['i>=5'] = 0*mV
+        assert_equal(G.v[:], np.array([0, 1, 2, 3, 4, 0, 0, 0, 0, 0])*volt)
+        # String index referring to a state variable
+        G.v['v<3*volt'] = 0*mV
+        assert_equal(G.v[:], np.array([0, 0, 0, 3, 4, 0, 0, 0, 0, 0])*volt)
+        # String index referring to state variables, i, and an external variable
+        ext = 2*volt
+        G.v['v>=ext and i==(N-6)'] = 0*mV
+        assert_equal(G.v[:], np.array([0, 0, 0, 3, 0, 0, 0, 0, 0, 0])*volt)
+
+        G.v = np.arange(10) * volt
+        # Strings for both condition and values
+        G.v['i>=5'] = 'v*2'
+        assert_equal(G.v[:], np.array([0, 1, 2, 3, 4, 10, 12, 14, 16, 18])*volt)
+        G.v['v>=5*volt'] = 'i*volt'
+        assert_equal(G.v[:], np.arange(10)*volt)
+
+
+def test_subexpression():
+    for codeobj_class in codeobj_classes:
+        G = NeuronGroup(10, '''dv/dt = freq : 1
+                               freq : Hz
+                               array : 1
+                               expr = 2*freq + array*Hz : Hz''',
+                        codeobj_class=codeobj_class)
+        G.freq = '10*i*Hz'
+        G.array = 5
+        assert_equal(G.expr[:], 2*10*np.arange(10)*Hz + 5*Hz)
+
+
+def test_scalar_parameter_access():
+    for codeobj_class in codeobj_classes:
+        G = NeuronGroup(10, '''dv/dt = freq : 1
+                               freq : Hz (scalar)
+                               number : 1 (scalar)
+                               array : 1''',
+                        codeobj_class=codeobj_class)
+
+        # Try setting a scalar variable
+        G.freq = 100*Hz
+        assert_equal(G.freq[:], 100*Hz)
+        G.freq[:] = 200*Hz
+        assert_equal(G.freq[:], 200*Hz)
+        G.freq = 'freq - 50*Hz + number*Hz'
+        assert_equal(G.freq[:], 150*Hz)
+        G.freq[:] = '50*Hz'
+        assert_equal(G.freq[:], 50*Hz)
+
+        # Check the second method of accessing that works
+        assert_equal(np.asanyarray(G.freq), 50*Hz)
+
+        # Check error messages
+        assert_raises(IndexError, lambda: G.freq[0])
+        assert_raises(IndexError, lambda: G.freq[1])
+        assert_raises(IndexError, lambda: G.freq[0:1])
+        assert_raises(IndexError, lambda: G.freq['i>5'])
+
+        assert_raises(ValueError, lambda: G.freq.set_item(slice(None), [0, 1]*Hz))
+        assert_raises(IndexError, lambda: G.freq.set_item(0, 100*Hz))
+        assert_raises(IndexError, lambda: G.freq.set_item(1, 100*Hz))
+        assert_raises(IndexError, lambda: G.freq.set_item('i>5', 100*Hz))
+
+
+def test_scalar_subexpression():
+    for codeobj_class in codeobj_classes:
+        G = NeuronGroup(10, '''dv/dt = freq : 1
+                               freq : Hz (scalar)
+                               number : 1 (scalar)
+                               array : 1
+                               sub = freq + number*Hz : Hz (scalar)''',
+                        codeobj_class=codeobj_class)
+        G.freq = 100*Hz
+        G.number = 50
+        assert G.sub[:] == 150*Hz
+
+    assert_raises(SyntaxError, lambda: NeuronGroup(10, '''dv/dt = freq : 1
+                                                          freq : Hz (scalar)
+                                                          array : 1
+                                                          sub = freq + array*Hz : Hz (scalar)'''))
+
+    # A scalar subexpresion cannot refer to implicitly vectorized functions
+    assert_raises(SyntaxError, lambda: NeuronGroup(10, 'sub = rand() : 1 (scalar)'))
 
 
 def test_repr():
@@ -302,17 +512,75 @@ def test_repr():
         for eq in G.equations.itervalues():
             assert len(func(eq))
 
+def test_indices():
+    G = NeuronGroup(10, 'v : 1')
+    G.v = 'i'
+    ext_var = 5
+    assert_equal(G.indices[:], G.i[:])
+    assert_equal(G.indices[5:], G.indices['i >= 5'])
+    assert_equal(G.indices[5:], G.indices['i >= ext_var'])
+    assert_equal(G.indices['v >= 5'], np.nonzero(G.v >= 5)[0])
+
+
+def test_get_dtype():
+    '''
+    Check the utility function get_dtype
+    '''
+    eqs = Equations('''dv/dt = -v / (10*ms) : volt
+                       x : 1
+                       b : boolean
+                       n : integer''')
+
+    # Test standard dtypes
+    assert get_dtype(eqs['v']) == brian_prefs['core.default_float_dtype']
+    assert get_dtype(eqs['x']) == brian_prefs['core.default_float_dtype']
+    assert get_dtype(eqs['n']) == brian_prefs['core.default_integer_dtype']
+    assert get_dtype(eqs['b']) == np.bool
+
+    # Test a changed default (float) dtype
+    assert get_dtype(eqs['v'], np.float128) == np.float128, get_dtype(eqs['v'], np.float128)
+    assert get_dtype(eqs['x'], np.float128) == np.float128
+    # integer and boolean variables should be unaffected
+    assert get_dtype(eqs['n']) == brian_prefs['core.default_integer_dtype']
+    assert get_dtype(eqs['b']) == np.bool
+
+    # Explicitly provide a dtype for some variables
+    dtypes = {'v': np.float128, 'x': np.float64, 'n': np.int64}
+    for varname in dtypes:
+        assert get_dtype(eqs[varname], dtypes) == dtypes[varname]
+
+    # Not setting some dtypes should use the standard dtypes
+    dtypes = {'n': np.int64}
+    assert get_dtype(eqs['n'], dtypes) == np.int64
+    assert get_dtype(eqs['v'], dtypes) == brian_prefs['core.default_float_dtype']
+
+    # Test that incorrect types raise an error
+    # incorrect general dtype
+    assert_raises(TypeError, lambda: get_dtype(eqs['v'], np.int32))
+    # incorrect specific types
+    assert_raises(TypeError, lambda: get_dtype(eqs['v'], {'v': np.int32}))
+    assert_raises(TypeError, lambda: get_dtype(eqs['n'], {'n': np.float32}))
+    assert_raises(TypeError, lambda: get_dtype(eqs['b'], {'b': np.int32}))
+
 
 if __name__ == '__main__':
     test_creation()
     test_variables()
+    test_scalar_variable()
     test_stochastic_variable()
     test_unit_errors()
     test_threshold_reset()
     test_unit_errors_threshold_reset()
     test_incomplete_namespace()
     test_namespace_errors()
+    test_namespace_warnings()
     test_syntax_errors()
     test_state_variables()
     test_state_variable_access()
+    test_state_variable_access_strings()
+    test_subexpression()
+    test_scalar_parameter_access()
+    test_scalar_subexpression()
+    test_indices()
     test_repr()
+    test_get_dtype()
