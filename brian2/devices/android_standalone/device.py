@@ -253,11 +253,12 @@ class AndroidDevice(Device):
         self.code_objects[codeobj.name] = codeobj
         return codeobj
 
-    def build(self, project_dir
-
-
-
-
+    def build(self, project_dir='output', compile_project=True, run_project=False, debug=True,
+              with_output=True, native=True,
+              additional_source_files=None, additional_header_files=None,
+              main_includes=None, run_includes=None,  # these are probably useless
+              run_args=None,
+              ):
         # Extract all the CodeObjects
         # Note that since we ran the Network object, these CodeObjects will be sorted into the right
         # running order, assuming that there is only one clock
@@ -345,10 +346,63 @@ class AndroidDevice(Device):
         open('output/renderscript.rs', 'w').write(renderscript_file_code)
         print("Code generation complete. Generated code can be found in ``output`` directory.")
 
+    def network_run(self, net, duration, report=None, report_period=60*second,
+                    namespace=None, level=0):
+
+        # We have to use +2 for the level argument here, since this function is
+        # called through the device_override mechanism
+        net.before_run(namespace, level=level+2)
+
+        self.clocks.update(net._clocks)
+
+        # TODO: from cpp_standalone/device.py - "remove this horrible hack"
+        for clock in self.clocks:
+            if clock.name == 'clock':
+                clock._name = '_clock'
+
+        # Extract all the CodeObjects
+        # Note that since we ran the Network object, these CodeObjects will be sorted into the right
+        # running order, assuming that there is only one clock
+        code_objects = []
+        for obj in net.objects:
+            for codeobj in obj._code_objects:
+                code_objects.append((obj.clock, codeobj))
+
+        # Generate the updaters
+        run_lines = ['{net.name}.clear();'.format(net=net)]
+        for clock, codeobj in code_objects:
+            run_lines.append('{net.name}.add({clock.name}, _run_{codeobj.name});'.format(clock=clock, net=net,
+                                                                                         codeobj-codeobj))
+        run_lines.append('{net.name}.run({duration});'.format(net=net, duration=float(duration)))
+        self.main_queue.append(('run_network', (net, run_lines)))
+
+    def run_function(self, name, include_in_parent=True):
+        '''
+        Context manager to divert code into a function
+
+        Code that happens within the scope of this context manager will go into the named function.
+
+        Parameters
+        ----------
+        name : str
+            The name of the function to divert code into.
+        include_in_parent : bool
+            Whether or not to include a call to the newly defined function in the parent context.
+        '''
+        return RunFunctionContext(name, include_in_parent)
+
+class RunFunctionContext(object):
+    def __init__(self, name, include_in_parent):
+        self.name = name
+        self.include_in_parent = include_in_parent
+    def __enter__(self):
+        android_standalone_device.main_queue.append(('start_run_func', (self.name, self.include_in_parent)))
+    def __exit__(self):
+        android_standalone_device.main_queue.append(('end_run_func', (self.name, self.include_in_parent)))
+
+
 android_device = AndroidDevice()
 
 all_devices['android'] = android_device
 
-def build(net):
-    android_device.build(net)
 
