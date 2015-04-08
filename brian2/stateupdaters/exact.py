@@ -36,10 +36,10 @@ def get_linear_system(eqs):
         If the equations cannot be converted into an M * X + B form.
     '''
     diff_eqs = eqs.substituted_expressions
-    diff_eq_names = eqs.diff_eq_names
-    
+    diff_eq_names = [name for name, _ in diff_eqs]
+
     symbols = [Symbol(name, real=True) for name in diff_eq_names]
-    
+
     coefficients = sp.zeros(len(diff_eq_names))
     constants = sp.zeros(len(diff_eq_names), 1)
 
@@ -47,7 +47,7 @@ def get_linear_system(eqs):
         s_expr = expr.sympy_expr.expand()
 
         current_s_expr = s_expr
-        for col_idx, (name, symbol) in enumerate(zip(eqs.diff_eq_names, symbols)):
+        for col_idx, symbol in enumerate(symbols):
             current_s_expr = current_s_expr.collect(symbol)
             constant_wildcard = Wild('c', exclude=[symbol])
             factor_wildcard = Wild('c_'+name, exclude=symbols)
@@ -103,7 +103,7 @@ def _non_constant_symbols(symbols, variables, t_symbol):
     for symbol in symbols:
         if symbol in variables and not getattr(variables[symbol],
                                                 'constant', False):
-            non_constant |= set([symbol])
+            non_constant |= {symbol}
 
     return non_constant
 
@@ -148,7 +148,8 @@ class IndependentStateUpdater(StateUpdateMethod):
         code = []
         for name, expression in diff_eqs:
             rhs = expression.sympy_expr
-            non_constant = _non_constant_symbols(rhs.atoms(), variables, t) - set([name])
+            non_constant = _non_constant_symbols(rhs.atoms(), variables, t) - {
+            name}
             if len(non_constant):
                 raise ValueError(('Equation for %s referred to non-constant '
                                   'variables %s') % (name, str(non_constant)))
@@ -164,14 +165,17 @@ class IndependentStateUpdater(StateUpdateMethod):
             # https://github.com/sympy/sympy/issues/2666
             try:
                 general_solution = sp.dsolve(diff_eq, f(t), simplify=True)
-            except (RuntimeError, AttributeError):  #AttributeError seems to be raised on Python 2.6
+            except RuntimeError:
                 general_solution = sp.dsolve(diff_eq, f(t), simplify=False)
             # Check whether this is an explicit solution
             if not getattr(general_solution, 'lhs', None) == f(t):
                 raise ValueError('Cannot explicitly solve: ' + str(diff_eq))
+            # seems to happen sometimes in sympy 0.7.5
+            if getattr(general_solution, 'rhs', None) == sp.nan:
+                raise ValueError('Cannot explicitly solve: ' + str(diff_eq))
             # Solve for C1 (assuming "var" as the initial value and "t0" as time)
-            if Symbol('C1') in general_solution:
-                if Symbol('C2') in general_solution:
+            if general_solution.has(Symbol('C1')):
+                if general_solution.has(Symbol('C2')):
                     raise ValueError('Too many constants in solution: %s' % str(general_solution))
                 constant_solution = sp.solve(general_solution, Symbol('C1'))
                 if len(constant_solution) != 1:

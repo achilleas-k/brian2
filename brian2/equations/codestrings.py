@@ -33,7 +33,7 @@ class CodeString(object):
         self.code = code
 
         # : Set of identifiers in the code string
-        self.identifiers = set(get_identifiers(code))
+        self.identifiers = get_identifiers(code)
 
     def __str__(self):
         return self.code
@@ -79,6 +79,9 @@ class Expression(CodeString):
         # : The expression as a sympy object
         self.sympy_expr = str_to_sympy(self.code)
 
+    stochastic_variables = property(lambda self: set([variable for variable in self.identifiers
+                                                      if variable =='xi' or variable.startswith('xi_')]),
+                                    doc='Stochastic variables in this expression')
 
     def split_stochastic(self):
         '''

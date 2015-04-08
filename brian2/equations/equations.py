@@ -17,7 +17,8 @@ from brian2.core.variables import Constant
 from brian2.core.functions import Function
 from brian2.parsing.sympytools import sympy_to_str, str_to_sympy
 from brian2.units.fundamentalunits import (Unit, Quantity, have_same_dimensions,
-                                           get_unit, DIMENSIONLESS)
+                                           get_unit, DIMENSIONLESS,
+                                           DimensionMismatchError)
 from brian2.units.allunits import (metre, meter, second, amp, kelvin, mole,
                                    candle, kilogram, radian, steradian, hertz,
                                    newton, pascal, joule, watt, coulomb, volt,
@@ -243,6 +244,9 @@ def unit_and_type_from_string(unit_string):
     # Another special case: boolean variable
     if unit_string == 'boolean':
         return Unit(1, dim=DIMENSIONLESS), BOOLEAN
+    if unit_string == 'bool':
+        raise TypeError("Use 'boolean' not 'bool' as the unit for a boolean "
+                        "variable.")
 
     # Yet another special case: integer variable
     if unit_string == 'integer':
@@ -379,6 +383,10 @@ class SingleEquation(object):
                            if not self.expr is None else set([]),
                            doc='All identifiers in the RHS of this equation.')
 
+    stochastic_variables = property(lambda self: set([variable for variable in self.identifiers
+                                                      if variable =='xi' or variable.startswith('xi_')]),
+                                    doc='Stochastic variables in the RHS of this equation')
+
     def _latex(self, *args):
         if self.type == DIFFERENTIAL_EQUATION:
             return (r'\frac{\mathrm{d}' + sympy.latex(self.varname) + r'}{\mathrm{d}t} = ' +
@@ -492,6 +500,8 @@ class Equations(collections.Mapping):
                                         eq.varname)
                 self._equations[eq.varname] = eq
 
+        self._substituted_expressions = None
+
         # save these to change the keys of the dictionary later
         model_var_replacements = []
         for varname, replacement in kwds.iteritems():
@@ -574,10 +584,8 @@ class Equations(collections.Mapping):
     #: Functions can be registered with the static method
     #: `Equations.register_identifier_check` and will be automatically
     #: used when checking identifiers
-    identifier_checks = set([check_identifier_basic,
-                             check_identifier_reserved,
-                             check_identifier_functions,
-                             check_identifier_units])
+    identifier_checks = {check_identifier_basic, check_identifier_reserved,
+                         check_identifier_functions, check_identifier_units}
 
     @staticmethod
     def register_identifier_check(func):
@@ -645,6 +653,10 @@ class Equations(collections.Mapping):
             `CodeString` object with all subexpression variables substituted
             with the respective expression.
         '''
+        # Cache the substituted expressions
+        if self._substituted_expressions is not None:
+            return self._substituted_expressions
+
         subst_exprs = []
         substitutions = {}
         for eq in self.ordered:
@@ -652,7 +664,7 @@ class Equations(collections.Mapping):
             if eq.expr is None:
                 continue
 
-            new_sympy_expr = eq.expr.sympy_expr.subs(substitutions)
+            new_sympy_expr = eq.expr.sympy_expr.xreplace(substitutions)
             new_str_expr = sympy_to_str(new_sympy_expr)
             expr = Expression(new_str_expr)
 
@@ -664,6 +676,7 @@ class Equations(collections.Mapping):
             else:
                 raise AssertionError('Unknown equation type %s' % eq.type)
 
+        self._substituted_expressions = subst_exprs
         return subst_exprs
 
     def _get_stochastic_type(self):
@@ -828,6 +841,7 @@ class Equations(collections.Mapping):
         external -= set(all_variables.keys())
 
         resolved_namespace = group.resolve_all(external,
+                                               external,  # all variables are user defined
                                                run_namespace=run_namespace,
                                                level=level+1)
         all_variables.update(resolved_namespace)
@@ -837,11 +851,26 @@ class Equations(collections.Mapping):
                 continue
 
             if eq.type == DIFFERENTIAL_EQUATION:
-                check_unit(str(eq.expr), self.units[var] / second,
-                           all_variables)
+                try:
+                    check_unit(str(eq.expr), self.units[var] / second,
+                               all_variables)
+                except DimensionMismatchError as ex:
+                    raise DimensionMismatchError(('Inconsistent units in '
+                                                  'differential equation '
+                                                  'defining variable %s:'
+                                                  '\n%s') % (eq.varname,
+                                                             ex.desc),
+                                                 *ex.dims)
             elif eq.type == SUBEXPRESSION:
-                check_unit(str(eq.expr), self.units[var],
+                try:
+                    check_unit(str(eq.expr), self.units[var],
                            all_variables)
+                except DimensionMismatchError as ex:
+                    raise DimensionMismatchError(('Inconsistent units in '
+                                                  'subexpression %s:'
+                                                  '\n%s') % (eq.varname,
+                                                             ex.desc),
+                                                 *ex.dims)
             else:
                 raise AssertionError('Unknown equation type: "%s"' % eq.type)
 

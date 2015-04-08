@@ -1,18 +1,13 @@
+from nose import SkipTest, with_setup
+from nose.plugins.attrib import attr
 from numpy.testing import assert_equal, assert_raises, assert_allclose
 
 from brian2 import *
 from brian2.parsing.sympytools import str_to_sympy, sympy_to_str
 from brian2.utils.logger import catch_logs
+from brian2.devices.device import restore_device
 
-# We can only test C++ if weave is availabe
-try:
-    import scipy.weave
-    codeobj_classes = [WeaveCodeObject, NumpyCodeObject]
-except ImportError:
-    # Can't test C++
-    codeobj_classes = [NumpyCodeObject]
-
-
+@attr('codegen-independent')
 def test_constants_sympy():
     '''
     Make sure that symbolic constants are understood correctly by sympy
@@ -35,100 +30,166 @@ def test_constants_values():
     assert G.v == np.inf
 
 
+def test_math_functions_short():
+    '''
+    Test that math functions give the same result, regardless of whether used
+    directly or in generated Python or C++ code. Test only a few functions
+    '''
+    default_dt = defaultclock.dt
+    test_array = np.array([-1, -0.5, 0, 0.5, 1])
+
+    with catch_logs() as _:  # Let's suppress warnings about illegal values
+        # Functions with a single argument
+        for func in [exp, np.sqrt]:
+
+            # Calculate the result directly
+            numpy_result = func(test_array)
+
+            # Calculate the result in a somewhat complicated way by using a
+            # subexpression in a NeuronGroup
+            if func.__name__ == 'absolute':
+                # we want to use the name abs instead of absolute
+                func_name = 'abs'
+            else:
+                func_name = func.__name__
+            G = NeuronGroup(len(test_array),
+                            '''func = {func}(variable) : 1
+                               variable : 1'''.format(func=func_name))
+            G.variable = test_array
+            mon = StateMonitor(G, 'func', record=True)
+            net = Network(G, mon)
+            net.run(default_dt)
+
+            assert_allclose(numpy_result, mon.func_.flatten(),
+                            err_msg='Function %s did not return the correct values' % func.__name__)
+
+        # Functions/operators
+        scalar = 3
+        # TODO: We are not testing the modulo operator here since it does
+        #       not work for double values in C
+        for func, operator in [(np.power, '**')]:
+
+            # Calculate the result directly
+            numpy_result = func(test_array, scalar)
+
+            # Calculate the result in a somewhat complicated way by using a
+            # subexpression in a NeuronGroup
+            G = NeuronGroup(len(test_array),
+                            '''func = variable {op} scalar : 1
+                               variable : 1'''.format(op=operator))
+            G.variable = test_array
+            mon = StateMonitor(G, 'func', record=True)
+            net = Network(G, mon)
+            net.run(default_dt)
+
+            assert_allclose(numpy_result, mon.func_.flatten(),
+                            err_msg='Function %s did not return the correct values' % func.__name__)
+
+
+@attr('long')
 def test_math_functions():
     '''
     Test that math functions give the same result, regardless of whether used
-    directly or in generated Python or C++ code.
+    directly or in generated Python or C++ code. Tests the remaining functions
+    that were not yet tested by test_math_functions_short
     '''
+    default_dt = defaultclock.dt
     test_array = np.array([-1, -0.5, 0, 0.5, 1])
 
-    with catch_logs() as _:  # Let's suppress warnings about illegal values        
-        for codeobj_class in codeobj_classes:
-            
-            # Functions with a single argument
-            for func in [sin, cos, tan, sinh, cosh, tanh,
-                         arcsin, arccos, arctan,
-                         exp, log, log10,
-                         np.sqrt, np.ceil, np.floor, np.abs]:
-                
-                # Calculate the result directly
-                numpy_result = func(test_array)
-                
-                # Calculate the result in a somewhat complicated way by using a
-                # subexpression in a NeuronGroup
-                clock = Clock()
-                if func.__name__ == 'absolute':
-                    # we want to use the name abs instead of absolute
-                    func_name = 'abs'
-                else:
-                    func_name = func.__name__
-                G = NeuronGroup(len(test_array),
-                                '''func = {func}(variable) : 1
-                                   variable : 1'''.format(func=func_name),
-                                   clock=clock,
-                                   codeobj_class=codeobj_class)
-                G.variable = test_array
-                mon = StateMonitor(G, 'func', record=True)
-                net = Network(G, mon)
-                net.run(clock.dt)
-                
-                assert_allclose(numpy_result, mon.func_.flatten(),
-                                err_msg='Function %s did not return the correct values' % func.__name__)
-            
-            # Functions/operators
-            scalar = 3
-            # TODO: We are not testing the modulo operator here since it does
-            #       not work for double values in C
-            for func, operator in [(np.power, '**')]:
-                
-                # Calculate the result directly
-                numpy_result = func(test_array, scalar)
-                
-                # Calculate the result in a somewhat complicated way by using a
-                # subexpression in a NeuronGroup
-                clock = Clock()
-                G = NeuronGroup(len(test_array),
-                                '''func = variable {op} scalar : 1
-                                   variable : 1'''.format(op=operator),
-                                   clock=clock,
-                                   codeobj_class=codeobj_class)
-                G.variable = test_array
-                mon = StateMonitor(G, 'func', record=True)
-                net = Network(G, mon)
-                net.run(clock.dt)
-                
-                assert_allclose(numpy_result, mon.func_.flatten(),
-                                err_msg='Function %s did not return the correct values' % func.__name__)
+    with catch_logs() as _:  # Let's suppress warnings about illegal values
+        # Functions with a single argument
+        for func in [cos, tan, sinh, cosh, tanh,
+                     arcsin, arccos, arctan,
+                     log, log10,
+                     np.ceil, np.floor, np.sign]:
+
+            # Calculate the result directly
+            numpy_result = func(test_array)
+
+            # Calculate the result in a somewhat complicated way by using a
+            # subexpression in a NeuronGroup
+            if func.__name__ == 'absolute':
+                # we want to use the name abs instead of absolute
+                func_name = 'abs'
+            else:
+                func_name = func.__name__
+            G = NeuronGroup(len(test_array),
+                            '''func = {func}(variable) : 1
+                               variable : 1'''.format(func=func_name))
+            G.variable = test_array
+            mon = StateMonitor(G, 'func', record=True)
+            net = Network(G, mon)
+            net.run(default_dt)
+
+            assert_allclose(numpy_result, mon.func_.flatten(),
+                            err_msg='Function %s did not return the correct values' % func.__name__)
 
 
+@attr('standalone-compatible')
+@with_setup(teardown=restore_device)
 def test_user_defined_function():
-    @make_function(codes={
-        'cpp':{
-            'support_code':"""
+    @implementation('cpp',"""
                 inline double usersin(double x)
                 {
                     return sin(x);
                 }
-                """,
-            'hashdefine_code':'',
-            },
-        })
+                """)
+    @implementation('cython', '''
+            cdef double usersin(double x):
+                return sin(x)
+            ''')
     @check_units(x=1, result=1)
     def usersin(x):
         return np.sin(x)
 
+    default_dt = defaultclock.dt
     test_array = np.array([0, 1, 2, 3])
-    for codeobj_class in codeobj_classes:
-        G = NeuronGroup(len(test_array),
-                        '''func = usersin(variable) : 1
-                                  variable : 1''',
-                        codeobj_class=codeobj_class)
-        G.variable = test_array
-        mon = StateMonitor(G, 'func', record=True)
-        net = Network(G, mon)
-        net.run(defaultclock.dt)
+    G = NeuronGroup(len(test_array),
+                    '''func = usersin(variable) : 1
+                              variable : 1''')
+    G.variable = test_array
+    mon = StateMonitor(G, 'func', record=True)
+    net = Network(G, mon)
+    net.run(default_dt)
 
-        assert_equal(np.sin(test_array), mon.func_.flatten())
+    assert_equal(np.sin(test_array), mon.func_.flatten())
+
+
+@with_setup(teardown=restore_device)
+def test_user_defined_function_units():
+    '''
+    Test the preparation of functions for use in code with check_units.
+    '''
+    if prefs.codegen.target != 'numpy':
+        raise SkipTest('numpy-only test')
+
+    def nothing_specified(x, y, z):
+        return x*(y+z)
+
+    no_result_unit = check_units(x=1, y=second, z=second)(nothing_specified)
+    one_arg_missing = check_units(x=1, z=second, result=second)(nothing_specified)
+    all_specified = check_units(x=1, y=second, z=second, result=second)(nothing_specified)
+
+    G = NeuronGroup(1, '''a : 1
+                          b : second
+                          c : second''',
+                    namespace={'nothing_specified': nothing_specified,
+                               'no_result_unit': no_result_unit,
+                               'one_arg_missing': one_arg_missing,
+                               'all_specified': all_specified})
+    net = Network(G)
+    net.run(0*ms)  # make sure we have a clock and therefore a t
+    G.c = 'all_specified(a, b, t)'
+    assert_raises(ValueError,
+                  lambda: setattr(G, 'c', 'one_arg_missing(a, b, t)'))
+    assert_raises(ValueError,
+                  lambda: setattr(G, 'c', 'no_result_unit(a, b, t)'))
+    assert_raises(ValueError,
+                  lambda: setattr(G, 'c', 'nothing_specified(a, b, t)'))
+    assert_raises(DimensionMismatchError,
+                  lambda: setattr(G, 'a', 'all_specified(a, b, t)'))
+    assert_raises(DimensionMismatchError,
+                  lambda: setattr(G, 'a', 'all_specified(b, a, t)'))
 
 
 def test_simple_user_defined_function():
@@ -138,20 +199,22 @@ def test_simple_user_defined_function():
     def usersin(x):
         return np.sin(x)
 
+    default_dt = defaultclock.dt
     test_array = np.array([0, 1, 2, 3])
     G = NeuronGroup(len(test_array),
                     '''func = usersin(variable) : 1
                               variable : 1''',
                     codeobj_class=NumpyCodeObject)
     G.variable = test_array
-    mon = StateMonitor(G, 'func', record=True)
+    mon = StateMonitor(G, 'func', record=True, codeobj_class=NumpyCodeObject)
     net = Network(G, mon)
-    net.run(defaultclock.dt)
+    net.run(default_dt)
 
     assert_equal(np.sin(test_array), mon.func_.flatten())
 
     # Check that it raises an error for C++
-    if WeaveCodeObject in codeobj_classes:
+    try:
+        import scipy.weave
         G = NeuronGroup(len(test_array),
                         '''func = usersin(variable) : 1
                               variable : 1''',
@@ -163,9 +226,16 @@ def test_simple_user_defined_function():
         # the lambda expression
         assert_raises(NotImplementedError,
                       lambda usersin: net.run(0.1*ms), usersin)
+    except ImportError:
+        pass
 
 
 def test_manual_user_defined_function():
+    if prefs.codegen.target != 'numpy':
+        raise SkipTest('numpy-only test')
+
+    default_dt = defaultclock.dt
+
     # User defined function without any decorators
     def foo(x, y):
         return x + y + 3*volt
@@ -198,7 +268,7 @@ def test_manual_user_defined_function():
     G.y = 2*volt
     mon = StateMonitor(G, 'func', record=True)
     net = Network(G, mon)
-    net.run(defaultclock.dt)
+    net.run(default_dt)
 
     assert mon[0].func == [6] * volt
 
@@ -213,37 +283,46 @@ def test_manual_user_defined_function():
     G.y = 2*volt
     mon = StateMonitor(G, 'func', record=True)
     net = Network(G, mon)
-    net.run(defaultclock.dt)
+    net.run(default_dt)
 
     assert mon[0].func == [6] * volt
 
-    # Test C++ implementation
-    if WeaveCodeObject in codeobj_classes:
-        code = {'support_code': '''
-        inline double foo(const double x, const double y)
-        {
-            return x + y + 3;
-        }
-        '''}
 
-        foo.implementations.add_implementations(codes={'cpp': code})
+def test_manual_user_defined_function_weave():
+    if prefs.codegen.target != 'weave':
+        raise SkipTest('weave-only test')
 
-        G = NeuronGroup(1, '''
-                           func = foo(x, y) : volt
-                           x : volt
-                           y : volt''',
-                        codeobj_class=WeaveCodeObject)
-        G.x = 1*volt
-        G.y = 2*volt
-        mon = StateMonitor(G, 'func', record=True)
-        net = Network(G, mon)
-        net.run(defaultclock.dt)
-        assert mon[0].func == [6] * volt
+    # User defined function without any decorators
+    def foo(x, y):
+        return x + y + 3*volt
+
+    foo = Function(foo, arg_units=[volt, volt], return_unit=volt)
+
+    code = {'support_code': '''
+    inline double foo(const double x, const double y)
+    {
+        return x + y + 3;
+    }
+    '''}
+
+    foo.implementations.add_implementation('cpp', code)
+
+    G = NeuronGroup(1, '''
+                       func = foo(x, y) : volt
+                       x : volt
+                       y : volt''')
+    G.x = 1*volt
+    G.y = 2*volt
+    mon = StateMonitor(G, 'func', record=True)
+    net = Network(G, mon)
+    net.run(defaultclock.dt)
+    assert mon[0].func == [6] * volt
 
 
+@attr('codegen-independent')
 def test_user_defined_function_discarding_units():
     # A function with units that should discard units also inside the function
-    @make_function(discard_units=True)
+    @implementation('numpy', discard_units=True)
     @check_units(v=volt, result=volt)
     def foo(v):
         return v + 3*volt  # this normally raises an error for unitless v
@@ -254,6 +333,7 @@ def test_user_defined_function_discarding_units():
     assert foo.implementations[NumpyCodeObject].get_code(None)(5) == 8
 
 
+@attr('codegen-independent')
 def test_user_defined_function_discarding_units_2():
     # Add a numpy implementation explicitly (as in TimedArray)
     unit = volt
@@ -272,6 +352,8 @@ def test_user_defined_function_discarding_units_2():
     # Test the function that is used during a run
     assert foo.implementations[NumpyCodeObject].get_code(None)(5) == 8
 
+
+@attr('codegen-independent')
 def test_function_implementation_container():
     import brian2.codegen.targets as targets
 
@@ -296,7 +378,7 @@ def test_function_implementation_container():
 
     # Register the code generation targets
     _previous_codegen_targets = set(targets.codegen_targets)
-    targets.codegen_targets = set([ACodeObject, BCodeObject])
+    targets.codegen_targets = {ACodeObject, BCodeObject}
 
     @check_units(x=volt, result=volt)
     def foo(x):
@@ -328,20 +410,151 @@ def test_function_implementation_container():
 
     # some basic dictionary properties
     assert len(container) == 4
-    assert set((key for key in container)) == set(['A Language', 'B',
-                                                   ACodeObject, BCodeGenerator])
+    assert set((key for key in container)) == {'A Language', 'B', ACodeObject,
+                                               BCodeGenerator}
 
     # Restore the previous codegeneration targets
     targets.codegen_targets = _previous_codegen_targets
 
 
+def test_function_dependencies_weave():
+    if prefs.codegen.target != 'weave':
+        raise SkipTest('weave-only test')
+
+    @implementation('cpp', '''
+    float foo(float x)
+    {
+        return 42*0.001;
+    }''')
+    @check_units(x=volt, result=volt)
+    def foo(x):
+        return 42*mV
+
+    # Second function with an independent implementation for numpy and an
+    # implementation for C++ that makes use of the previous function.
+
+    @implementation('cpp', '''
+    float bar(float x)
+    {
+        return 2*foo(x);
+    }''', dependencies={'foo': foo})
+    @check_units(x=volt, result=volt)
+    def bar(x):
+        return 84*mV
+
+    G = NeuronGroup(5, 'v : volt')
+    updater = G.custom_operation('v = bar(v)')
+    net = Network(G, updater)
+    net.run(defaultclock.dt)
+
+    assert_allclose(G.v_[:], 84*0.001)
+
+
+def test_function_dependencies_cython():
+    if prefs.codegen.target != 'cython':
+        raise SkipTest('cython-only test')
+
+    @implementation('cython', '''
+    cdef float foo(float x):
+        return 42*0.001
+    ''')
+    @check_units(x=volt, result=volt)
+    def foo(x):
+        return 42*mV
+
+    # Second function with an independent implementation for numpy and an
+    # implementation for C++ that makes use of the previous function.
+
+    @implementation('cython', '''
+    cdef float bar(float x):
+        return 2*foo(x)
+    ''', dependencies={'foo': foo})
+    @check_units(x=volt, result=volt)
+    def bar(x):
+        return 84*mV
+
+    G = NeuronGroup(5, 'v : volt')
+    updater = G.custom_operation('v = bar(v)')
+    net = Network(G, updater)
+    net.run(defaultclock.dt)
+
+    assert_allclose(G.v_[:], 84*0.001)
+
+
+def test_function_dependencies_numpy():
+    if prefs.codegen.target != 'numpy':
+        raise SkipTest('numpy-only test')
+
+    @implementation('cpp', '''
+    float foo(float x)
+    {
+        return 42*0.001;
+    }''')
+    @check_units(x=volt, result=volt)
+    def foo(x):
+        return 42*mV
+
+    # Second function with an independent implementation for C++ and an
+    # implementation for numpy that makes use of the previous function.
+
+    # Note that we don't need to use the explicit dependencies mechanism for
+    # numpy, since the Python function stores a reference to the referenced
+    # function directly
+
+    @implementation('cpp', '''
+    float bar(float x)
+    {
+        return 84*0.001;
+    }''')
+    @check_units(x=volt, result=volt)
+    def bar(x):
+        return 2*foo(x)
+
+    G = NeuronGroup(5, 'v : volt')
+    updater = G.custom_operation('v = bar(v)')
+    net = Network(G, updater)
+    net.run(defaultclock.dt)
+
+    assert_allclose(G.v_[:], 84*0.001)
+
+@attr('standalone-compatible')
+@with_setup(teardown=restore_device)
+def test_binomial():
+    binomial_f_approximated = BinomialFunction(100, 0.1, approximate=True)
+    binomial_f = BinomialFunction(100, 0.1, approximate=False)
+
+    # Just check that it does not raise an error and that it produces some
+    # values
+    G = NeuronGroup(1, '''x : 1
+                          y : 1''')
+    updater = G.custom_operation('''x = binomial_f_approximated()
+                                    y = binomial_f()''')
+    mon = StateMonitor(G, ['x', 'y'], record=0)
+    run(1*ms)
+    assert np.var(mon[0].x) > 0
+    assert np.var(mon[0].y) > 0
+
+
 if __name__ == '__main__':
-    test_constants_sympy()
-    test_constants_values()
-    test_math_functions()
-    test_user_defined_function()
-    test_simple_user_defined_function()
-    test_manual_user_defined_function()
-    test_user_defined_function_discarding_units()
-    test_user_defined_function_discarding_units_2()
-    test_function_implementation_container()
+    for f in [
+            test_constants_sympy,
+            test_constants_values,
+            test_math_functions_short,
+            test_math_functions,
+            test_user_defined_function,
+            test_user_defined_function_units,
+            test_simple_user_defined_function,
+            test_manual_user_defined_function,
+            test_manual_user_defined_function_weave,
+            test_user_defined_function_discarding_units,
+            test_user_defined_function_discarding_units_2,
+            test_function_implementation_container,
+            test_function_dependencies_numpy,
+            test_function_dependencies_weave,
+            test_function_dependencies_cython,
+            test_binomial
+            ]:
+        try:
+            f()
+        except SkipTest as e:
+            print 'Skipping test', f.__name__, e

@@ -10,14 +10,17 @@ from brian2.equations.refractory import add_refractoriness
 from brian2.stateupdaters.base import StateUpdateMethod
 from brian2.codegen.translation import analyse_identifiers
 from brian2.codegen.codeobject import check_code_units
-from brian2.core.variables import Variables
+from brian2.core.variables import (Variables, LinkedVariable,
+                                   DynamicArrayVariable, Subexpression)
 from brian2.core.spikesource import SpikeSource
 from brian2.parsing.expressions import (parse_expression_unit,
                                         is_boolean_expression)
 from brian2.utils.logger import get_logger
 from brian2.utils.stringtools import get_identifiers
 from brian2.units.allunits import second
-from brian2.units.fundamentalunits import Quantity, Unit, have_same_dimensions
+from brian2.units.fundamentalunits import (Quantity, Unit,
+                                           have_same_dimensions,
+                                           DimensionMismatchError)
 
 
 from .group import Group, CodeRunner, get_dtype
@@ -29,6 +32,23 @@ __all__ = ['NeuronGroup']
 logger = get_logger(__name__)
 
 
+def _guess_membrane_potential(equations):
+    '''
+    Little helper function to guess which variable represents the membrane
+    potential. This follows the same logic as in Brian1 but is only used to
+    give a suggestion in the error message when a Brian1-style syntax is used
+    for threshold or reset.
+    '''
+    if len(equations) == 1:
+        return equations.keys()[0]
+    for name, eq in equations.iteritems():
+        if name in ['V', 'v', 'Vm', 'vm']:
+            return name
+
+    # nothing found
+    return None
+
+
 class StateUpdater(CodeRunner):
     '''
     The `CodeRunner` that updates the state variables of a `NeuronGroup`
@@ -36,10 +56,12 @@ class StateUpdater(CodeRunner):
     '''
     def __init__(self, group, method):
         self.method_choice = method
-        
         CodeRunner.__init__(self, group,
                             'stateupdate',
-                            when=(group.clock, 'groups'),
+                            code='',  # will be set in update_abstract_code
+                            clock=group.clock,
+                            when='groups',
+                            order=group.order,
                             name=group.name + '_stateupdater*',
                             check_units=False)
 
@@ -68,6 +90,7 @@ class StateUpdater(CodeRunner):
         else:
             identifiers = get_identifiers(ref)
             variables = self.group.resolve_all(identifiers,
+                                               identifiers,
                                                run_namespace=run_namespace,
                                                level=level+1)
             unit = parse_expression_unit(str(ref), variables)
@@ -102,9 +125,13 @@ class StateUpdater(CodeRunner):
 
         # Get all names used in the equations (and always get "dt")
         names = self.group.equations.names
-        external_names = self.group.equations.identifiers | set(['dt'])
+        external_names = self.group.equations.identifiers | {'dt'}
 
         variables = self.group.resolve_all(used_known | unknown | names | external_names,
+                                           # we don't need to raise any warnings
+                                           # for the user here, warnings will
+                                           # be raised in create_runner_codeobj
+                                           set(),
                                            run_namespace=run_namespace, level=level+1)
 
         # Since we did not necessarily no all the functions at creation time,
@@ -113,6 +140,11 @@ class StateUpdater(CodeRunner):
                                                                variables,
                                                                self.method_choice)
         self.abstract_code += self.method(self.group.equations, variables)
+        user_code = '\n'.join(['{var} = {expr}'.format(var=var, expr=expr)
+                               for var, expr in
+                               self.group.equations.substituted_expressions])
+        self.user_code = user_code
+
 
 
 class Thresholder(CodeRunner):
@@ -130,7 +162,10 @@ class Thresholder(CodeRunner):
             needed_variables=['t', 'not_refractory', 'lastspike']
         CodeRunner.__init__(self, group,
                             'threshold',
-                            when=(group.clock, 'thresholds'),
+                            code='',  # will be set in update_abstract_code
+                            clock=group.clock,
+                            when='thresholds',
+                            order=group.order,
                             name=group.name+'_thresholder*',
                             needed_variables=needed_variables,
                             template_kwds=template_kwds)
@@ -145,8 +180,23 @@ class Thresholder(CodeRunner):
 
     def update_abstract_code(self, run_namespace=None, level=0):
         code = self.group.threshold
+        # Raise a useful error message when the user used a Brian1 syntax
+        if not isinstance(code, basestring):
+            if isinstance(code, Quantity):
+                t = 'a quantity'
+            else:
+                t = '%s' % type(code)
+            error_msg = 'Threshold condition has to be a string, not %s.' % t
+            vm_var = _guess_membrane_potential(self.group.equations)
+            if vm_var is not None:
+                error_msg += " Probably you intended to use '%s > ...'?" % vm_var
+            raise TypeError(error_msg)
+
+        self.user_code = '_cond = ' + code
+
         identifiers = get_identifiers(code)
         variables = self.group.resolve_all(identifiers,
+                                           identifiers,
                                            run_namespace=run_namespace,
                                            level=level+1)
         if not is_boolean_expression(self.group.threshold, variables):
@@ -166,7 +216,10 @@ class Resetter(CodeRunner):
     def __init__(self, group):
         CodeRunner.__init__(self, group,
                             'reset',
-                            when=(group.clock, 'resets'),
+                            code='',  # will be set in update_abstract_code
+                            clock=group.clock,
+                            when='resets',
+                            order=group.order,
                             name=group.name + '_resetter*',
                             override_conditional_write=['not_refractory'])
 
@@ -179,7 +232,20 @@ class Resetter(CodeRunner):
             pass
 
     def update_abstract_code(self, run_namespace=None, level=0):
-        self.abstract_code = self.group.reset
+        code = self.group.reset
+        # Raise a useful error message when the user used a Brian1 syntax
+        if not isinstance(code, basestring):
+            if isinstance(code, Quantity):
+                t = 'a quantity'
+            else:
+                t = '%s' % type(code)
+            error_msg = 'Reset statement has to be a string, not %s.' % t
+            vm_var = _guess_membrane_potential(self.group.equations)
+            if vm_var is not None:
+                error_msg += " Probably you intended to use '%s = ...'?" % vm_var
+            raise TypeError(error_msg)
+
+        self.abstract_code = code
 
 
 class NeuronGroup(Group, SpikeSource):
@@ -221,8 +287,15 @@ class NeuronGroup(Group, SpikeSource):
         setting `core.default_float_dtype` is used.
     codeobj_class : class, optional
         The `CodeObject` class to run code with.
-    clock : Clock, optional
-        The update clock to be used, or defaultclock if not specified.
+    dt : `Quantity`, optional
+        The time step to be used for the simulation. Cannot be combined with
+        the `clock` argument.
+    clock : `Clock`, optional
+        The update clock to be used. If neither a clock, nor the `dt` argument
+        is specified, the `defaultclock` will be used.
+    order : int, optional
+        The priority of of this group for operations occurring at the same time
+        step and in the same scheduling slot. Defaults to 0.
     name : str, optional
         A unique name for the group, otherwise use ``neurongroup_0``, etc.
         
@@ -230,19 +303,27 @@ class NeuronGroup(Group, SpikeSource):
     -----
     `NeuronGroup` contains a `StateUpdater`, `Thresholder` and `Resetter`, and
     these are run at the 'groups', 'thresholds' and 'resets' slots (i.e. the
-    values of `Scheduler.when` take these values). The `Scheduler.order`
-    attribute is set to 0 initially, but this can be modified using the
-    attributes `state_updater`, `thresholder` and `resetter`.    
+    values of their `when` attribute take these values). The `order`
+    attribute will be passed down to the contained objects but can be set
+    individually by setting the `order` attribute of the `state_updater`,
+    `thresholder` and `resetter` attributes, respectively.
     '''
-    def __init__(self, N, model, method=None,
+    add_to_magic_network = True
+
+    def __init__(self, N, model,
+                 method=('linear', 'euler', 'milstein'),
                  threshold=None,
                  reset=None,
                  refractory=False,
                  namespace=None,
                  dtype=None,
-                 clock=None, name='neurongroup*',
+                 dt=None,
+                 clock=None,
+                 order=0,
+                 name='neurongroup*',
                  codeobj_class=None):
-        Group.__init__(self, when=clock, name=name)
+        Group.__init__(self, dt=dt, clock=clock, when='start', order=order,
+                       name=name)
 
         self.codeobj_class = codeobj_class
 
@@ -267,8 +348,8 @@ class NeuronGroup(Group, SpikeSource):
 
         # Check flags
         model.check_flags({DIFFERENTIAL_EQUATION: ('unless refractory',),
-                           PARAMETER: ('constant', 'scalar'),
-                           SUBEXPRESSION: ('scalar',)})
+                           PARAMETER: ('constant', 'shared', 'linked'),
+                           SUBEXPRESSION: ('shared',)})
 
         # add refractoriness
         if refractory is not False:
@@ -277,7 +358,7 @@ class NeuronGroup(Group, SpikeSource):
         uses_refractoriness = len(model) and any(['unless refractory' in eq.flags
                                                   for eq in model.itervalues()
                                                   if eq.type == DIFFERENTIAL_EQUATION])
-
+        self._linked_variables = set()
         logger.debug("Creating NeuronGroup of size {self._N}, "
                      "equations {self.equations}.".format(self=self))
 
@@ -361,6 +442,123 @@ class NeuronGroup(Group, SpikeSource):
         spikespace = self.variables['_spikespace'].get_value()
         return spikespace[:spikespace[-1]]
 
+    def state(self, name, use_units=True, level=0):
+        try:
+            return Group.state(self, name, use_units=use_units, level=level+1)
+        except KeyError as ex:
+            if name in self._linked_variables:
+                raise TypeError(('Link target for variable %s has not been '
+                                 'set.') % name)
+            else:
+                raise ex
+
+    def __setattr__(self, key, value):
+        # attribute access is switched off until this attribute is created by
+        # _enable_group_attributes
+        if not hasattr(self, '_group_attribute_access_active') or key in self.__dict__:
+            object.__setattr__(self, key, value)
+        elif key in self._linked_variables:
+            if not isinstance(value, LinkedVariable):
+                raise ValueError(('Cannot set a linked variable directly, link '
+                                  'it to another variable using "linked_var".'))
+            linked_var = value.variable
+            
+            if isinstance(linked_var, DynamicArrayVariable):
+                raise NotImplementedError(('Linking to variable %s is not '
+                                           'supported, can only link to '
+                                           'state variables of fixed '
+                                           'size.') % linked_var.name)
+
+            eq = self.equations[key]
+            if eq.unit != linked_var.unit:
+                raise DimensionMismatchError(('Unit of variable %s does not '
+                                              'match its link target %s') % (key,
+                                                                             linked_var.name))
+
+            if not isinstance(linked_var, Subexpression):
+                var_length = len(linked_var)
+            else:
+                var_length = len(linked_var.owner)
+
+            if value.index is not None:
+                try:
+                    index_array = np.asarray(value.index)
+                    if not np.issubsctype(index_array.dtype, np.int):
+                        raise TypeError()
+                except TypeError:
+                    raise TypeError(('The index for a linked variable has '
+                                     'to be an integer array'))
+                size = len(index_array)
+                source_index = value.group.variables.indices[value.name]
+                if source_index not in ('_idx', '0'):
+                    # we are indexing into an already indexed variable,
+                    # calculate the indexing into the target variable
+                    index_array = value.group.variables[source_index].get_value()[index_array]
+
+                if not index_array.ndim == 1 or size != len(self):
+                    raise TypeError(('Index array for linked variable %s '
+                                     'has to be a one-dimensional array of '
+                                     'length %d, but has shape '
+                                     '%s') % (key,
+                                              len(self),
+                                              str(index_array.shape)))
+                if min(index_array) < 0 or max(index_array) >= var_length:
+                    raise ValueError('Index array for linked variable %s '
+                                     'contains values outside of the valid '
+                                     'range [0, %d[' % (key,
+                                                        var_length))
+                self.variables.add_array('_%s_indices' % key, unit=Unit(1),
+                                         size=size, dtype=index_array.dtype,
+                                         constant=True, read_only=True,
+                                         values=index_array)
+                index = '_%s_indices' % key
+            else:
+                if linked_var.scalar or (var_length == 1 and self._N != 1):
+                    index = '0'
+                else:
+                    index = value.group.variables.indices[value.name]
+                    if index == '_idx':
+                        target_length = var_length
+                    else:
+                        target_length = len(value.group.variables[index])
+                        # we need a name for the index that does not clash with
+                        # other names and a reference to the index
+                        new_index = '_' + value.name + '_index_' + index
+                        self.variables.add_reference(new_index,
+                                                     value.group,
+                                                     index)
+                        index = new_index
+
+                    if len(self) != target_length:
+                        raise ValueError(('Cannot link variable %s to %s, the size of '
+                                          'the target group does not match '
+                                          '(%d != %d). You can provide an indexing '
+                                          'scheme with the "index" keyword to link '
+                                          'groups with different sizes') % (key,
+                                                           linked_var.name,
+                                                           len(self),
+                                                           target_length))
+
+            self.variables.add_reference(key,
+                                         value.group,
+                                         value.name,
+                                         index=index)
+            log_msg = ('Setting {target}.{targetvar} as a link to '
+                       '{source}.{sourcevar}').format(target=self.name,
+                                                      targetvar=key,
+                                                      source=value.variable.owner.name,
+                                                      sourcevar=value.variable.name)
+            if index is not None:
+                log_msg += '(using "{index}" as index variable)'.format(index=index)
+            logger.debug(log_msg)
+        else:
+            if isinstance(value, LinkedVariable):
+                raise TypeError(('Cannot link variable %s, it has to be marked '
+                                 'as a linked variable with "(linked)" in the '
+                                 'model equations.') % key)
+            else:
+                Group.__setattr__(self, key, value, level=1)
+
     def __getitem__(self, item):
         if not isinstance(item, slice):
             raise TypeError('Subgroups can only be constructed using slicing syntax')
@@ -379,7 +577,6 @@ class NeuronGroup(Group, SpikeSource):
         entries for the equation variables and some standard entries.
         '''
         self.variables = Variables(self)
-        self.variables.add_clock_variables(self.clock)
         self.variables.add_constant('N', Unit(1), self._N)
 
         # Standard variables always present
@@ -388,25 +585,34 @@ class NeuronGroup(Group, SpikeSource):
         # Add the special variable "i" which can be used to refer to the neuron index
         self.variables.add_arange('i', size=self._N, constant=True,
                                   read_only=True)
+        # Add the clock variables
+        self.variables.create_clock_variables(self._clock)
 
         for eq in self.equations.itervalues():
             dtype = get_dtype(eq, user_dtype)
 
             if eq.type in (DIFFERENTIAL_EQUATION, PARAMETER):
-                constant = 'constant' in eq.flags
-                scalar = 'scalar' in eq.flags
-                size = 1 if scalar else self._N
-                index = '0' if scalar else None
-                self.variables.add_array(eq.varname, size=size,
-                                         unit=eq.unit, dtype=dtype,
-                                         constant=constant,
-                                         scalar=scalar,
-                                         index=index)
+                if 'linked' in eq.flags:
+                    # 'linked' cannot be combined with other flags
+                    if not len(eq.flags) == 1:
+                        raise SyntaxError(('The "linked" flag cannot be '
+                                           'combined with other flags'))
+                    self._linked_variables.add(eq.varname)
+                else:
+                    constant = 'constant' in eq.flags
+                    shared = 'shared' in eq.flags
+                    size = 1 if shared else self._N
+                    index = '0' if shared else None
+                    self.variables.add_array(eq.varname, size=size,
+                                             unit=eq.unit, dtype=dtype,
+                                             constant=constant,
+                                             scalar=shared,
+                                             index=index)
             elif eq.type == SUBEXPRESSION:
                 self.variables.add_subexpression(eq.varname, unit=eq.unit,
                                                  expr=str(eq.expr),
                                                  dtype=dtype,
-                                                 scalar='scalar' in eq.flags)
+                                                 scalar='shared' in eq.flags)
             else:
                 raise AssertionError('Unknown type of equation: ' + eq.eq_type)
 
@@ -423,13 +629,13 @@ class NeuronGroup(Group, SpikeSource):
 
         # Check scalar subexpressions
         for eq in self.equations.itervalues():
-            if eq.type == SUBEXPRESSION and 'scalar' in eq.flags:
+            if eq.type == SUBEXPRESSION and 'shared' in eq.flags:
                 var = self.variables[eq.varname]
                 for identifier in var.identifiers:
                     if identifier in self.variables:
                         if not self.variables[identifier].scalar:
-                            raise SyntaxError(('Scalar subexpression %s refers '
-                                               'to non-scalar variable %s.')
+                            raise SyntaxError(('Shared subexpression %s refers '
+                                               'to non-shared variable %s.')
                                               % (eq.varname, identifier))
 
 
@@ -437,7 +643,7 @@ class NeuronGroup(Group, SpikeSource):
         # Check units
         self.equations.check_units(self, run_namespace=run_namespace,
                                    level=level+1)
-    
+
     def _repr_html_(self):
         text = [r'NeuronGroup "%s" with %d neurons.<br>' % (self.name, self._N)]
         text.append(r'<b>Model:</b><nr>')

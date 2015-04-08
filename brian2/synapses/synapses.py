@@ -6,9 +6,12 @@ import collections
 from collections import defaultdict
 import weakref
 import re
+from numbers import Number
 
 import numpy as np
 
+from brian2.core.base import weakproxy_with_fallback
+from brian2.core.base import device_override
 from brian2.core.variables import (DynamicArrayVariable, Variables)
 from brian2.codegen.codeobject import create_runner_codeobj
 from brian2.devices.device import get_device
@@ -24,7 +27,6 @@ from brian2.units.allunits import second
 from brian2.utils.logger import get_logger
 from brian2.core.spikesource import SpikeSource
 
-
 MAX_SYNAPSES = 2147483647
 
 __all__ = ['Synapses']
@@ -37,11 +39,13 @@ class StateUpdater(CodeRunner):
     The `CodeRunner` that updates the state variables of a `Synapses`
     at every timestep.
     '''
-    def __init__(self, group, method):
+    def __init__(self, group, method, clock, order):
         self.method_choice = method
         CodeRunner.__init__(self, group,
                             'stateupdate',
-                            when=(group.clock, 'groups'),
+                            clock=clock,
+                            when='groups',
+                            order=order,
                             name=group.name + '_stateupdater',
                             check_units=False)
 
@@ -83,7 +87,9 @@ class SummedVariableUpdater(CodeRunner):
                             needed_variables=[target_varname],
                             # We want to update the sumned variable before
                             # the target group gets updated
-                            when=(target.clock, 'groups', -1),
+                            clock=target.clock,
+                            when='groups',
+                            order=target.order-1,
                             name=synapses.name + '_summed_variable_' + target_varname,
                             template_kwds=template_kwds)
 
@@ -129,7 +135,7 @@ class SynapticPathway(CodeRunner, Group):
         else:
             raise ValueError('prepost argument has to be either "pre" or '
                              '"post"')
-        self.synapses = synapses
+        self.synapses = weakref.proxy(synapses)
 
         if objname is None:
             objname = prepost + '*'
@@ -137,7 +143,9 @@ class SynapticPathway(CodeRunner, Group):
         CodeRunner.__init__(self, synapses,
                             'synapses',
                             code=code,
-                            when=(synapses.clock, 'synapses'),
+                            clock=self.source.clock,
+                            when='synapses',
+                            order=0,
                             name=synapses.name + '_' + objname,
                             template_kwds={'pathway': self})
 
@@ -146,16 +154,15 @@ class SynapticPathway(CodeRunner, Group):
         self.spikes_start = self.source.start
         self.spikes_stop = self.source.stop
 
-        self.spiking_synapses = []
+        self.spiking_synapses = np.array([], dtype=np.int32)
         self.variables = Variables(self)
         self.variables.add_attribute_variable('_spiking_synapses', unit=Unit(1),
                                               obj=self,
                                               attribute='spiking_synapses',
                                               constant=False,
                                               scalar=False)
-        self.variables.add_reference('_spikespace',
-                                     self.source.variables['_spikespace'])
-        self.variables.add_reference('N', synapses.variables['N'])
+        self.variables.add_reference('_spikespace', self.source)
+        self.variables.add_reference('N', synapses)
         if delay is None:  # variable delays
             self.variables.add_dynamic_array('delay', unit=second,
                                              size=synapses._N, constant=True,
@@ -184,9 +191,6 @@ class SynapticPathway(CodeRunner, Group):
         # Re-extract the last part of the name from the full name
         self.objname = self.name[len(synapses.name) + 1:]
 
-        #: The simulation dt (necessary for the delays)
-        self.dt = self.synapses.clock.dt_
-
         #: The `SpikeQueue`
         self.queue = None
 
@@ -200,6 +204,7 @@ class SynapticPathway(CodeRunner, Group):
     def __len__(self):
         return self.N_
 
+    @device_override('synaptic_pathway_update_abstract_code')
     def update_abstract_code(self, run_namespace=None, level=0):
         if self.synapses.event_driven is not None:
             event_driven_update = independent(self.synapses.event_driven,
@@ -215,6 +220,7 @@ class SynapticPathway(CodeRunner, Group):
         self.abstract_code += self.code + '\n'
         self.abstract_code += 'lastupdate = t\n'
 
+    @device_override('synaptic_pathway_before_run')
     def before_run(self, run_namespace=None, level=0):
         # execute code to initalize the spike queue
         if self._initialise_queue_codeobj is None:
@@ -225,9 +231,9 @@ class SynapticPathway(CodeRunner, Group):
                                                                    check_units=False,
                                                                    additional_variables=self.variables,
                                                                    run_namespace=run_namespace,
-                                                                   level=level+1)
+                                                                   level=level+2)
         self._initialise_queue_codeobj()
-        CodeRunner.before_run(self, run_namespace, level=level+1)
+        CodeRunner.before_run(self, run_namespace, level=level+2)
 
         # we insert rather than replace because CodeRunner puts a CodeObject in updaters already
         if self._pushspikes_codeobj is None:
@@ -238,19 +244,46 @@ class SynapticPathway(CodeRunner, Group):
                                                              check_units=False,
                                                              additional_variables=self.variables,
                                                              run_namespace=run_namespace,
-                                                             level=level+1)
+                                                             level=level+2)
 
         self._code_objects.insert(0, weakref.proxy(self._pushspikes_codeobj))
 
     def initialise_queue(self):
+        if self.synapse_sources.get_len() == 0:
+            logger.warn(("Synapses object '%s' does not have any synapses. Did "
+                         "you forget a 'connect'?") % self.synapses.name,
+                        'no_synapses', once=True)
         if self.queue is None:
             self.queue = get_device().spike_queue(self.source.start, self.source.stop)
 
         # Update the dt (might have changed between runs)
-        self.dt = self.synapses.clock.dt_
 
-        self.queue.prepare(self._delays.get_value(), self.dt,
+        self.queue.prepare(self._delays.get_value(), self.source.clock.dt_,
                            self.synapse_sources.get_value())
+
+        if len({self.source.clock.dt_, self.synapses.clock.dt_,
+                self.target.clock.dt_}) > 1:
+            logger.warn(("Note that the synaptic pathway '{pathway}' will run on the "
+                         "clock of the group '{source}' using a dt of {dt}. Either "
+                         "the Synapses object '{synapses}' or the target '{target}' "
+                         "(or both) are using a different dt. This might lead to "
+                         "unexpected results. In particular, all delays will be rounded to "
+                         "multiples of {dt}. If in doubt, try to ensure that "
+                         "'{source}', '{synapses}', and '{target}' use the "
+                         "same dt.").format(pathway=self.name,
+                                            source=self.source.name,
+                                            target=self.target.name,
+                                            dt=self.source.clock.dt,
+                                            synapses=self.synapses.name),
+                        'synapses_dt_mismatch', once=True)
+
+    def _store(self, name='default'):
+        if self.queue is not None:
+            self.queue._store(name)
+
+    def _restore(self, name='default'):
+        if self.queue is not None:
+            self.queue._restore(name)
 
     def push_spikes(self):
         # Push new spikes into the queue
@@ -268,9 +301,13 @@ def slice_to_test(x):
     Returns a testing function corresponding to whether an index is in slice x.
     x can also be an int.
     '''
-    if isinstance(x,int):
+    try:
+        x = int(x)
         return lambda y: (y == x)
-    elif isinstance(x, slice):
+    except TypeError:
+        pass
+
+    if isinstance(x, slice):
         if isinstance(x, slice) and x == slice(None):
             # No need for testing
             return lambda y: np.repeat(True, len(y))
@@ -305,6 +342,11 @@ def slice_to_test(x):
 
 
 def find_synapses(index, synaptic_neuron):
+    try:
+        index = int(index)
+    except TypeError:
+        pass
+
     if isinstance(index, (int, slice)):
         test = slice_to_test(index)
         found = test(synaptic_neuron)
@@ -330,6 +372,123 @@ def _synapse_numbers(pre_neurons, post_neurons):
         numbers[(source, target)] = number + 1
     return synapse_numbers
 
+
+class SynapticSubgroup(object):
+    '''
+    A simple subgroup of `Synapses` that can be used for indexing.
+
+    Parameters
+    ----------
+    indices : `ndarray` of int
+        The synaptic indices represented by this subgroup.
+    synaptic_pre : `DynamicArrayVariable`
+        References to all pre-synaptic indices. Only used to throw an error
+        when new synapses where added after creating this object.
+    '''
+    def __init__(self, synapses, indices):
+        self.synapses = weakproxy_with_fallback(synapses)
+        self._stored_indices = indices
+        self._synaptic_pre = synapses.variables['_synaptic_pre']
+        self._source_N = self._synaptic_pre.size  # total number of synapses
+
+    def _indices(self, index_var='_idx'):
+        if index_var != '_idx':
+            raise AssertionError('Did not expect index %s here.' % index_var)
+        if len(self._synaptic_pre.get_value()) != self._source_N:
+            raise RuntimeError(('Synapses have been added/removed since this '
+                                'synaptic subgroup has been created'))
+        return self._stored_indices
+
+
+    def __repr__(self):
+        return '<%s, storing %d indices of %s>' % (self.__class__.__name__,
+                                                   len(self._stored_indices),
+                                                   self.synapses.name)
+
+
+class SynapticIndexing(object):
+
+    def __init__(self, synapses):
+        self.synapses = weakref.proxy(synapses)
+        self.source = weakproxy_with_fallback(self.synapses.source)
+        self.target = weakproxy_with_fallback(self.synapses.target)
+        self.synaptic_pre = synapses.variables['_synaptic_pre']
+        self.synaptic_post = synapses.variables['_synaptic_post']
+
+    def __call__(self, index=None, index_var='_idx'):
+        '''
+        Returns synaptic indices for `index`, which can be a tuple of indices
+        (including arrays and slices), a single index or a string.
+
+        '''
+        if index is None:
+            index = slice(None)
+
+        if (not isinstance(index, (tuple, basestring)) and
+                (isinstance(index, (int, np.ndarray, slice,
+                                   collections.Sequence))
+                 or hasattr(index, '_indices'))):
+            if hasattr(index, '_indices'):
+                final_indices = index._indices(index_var=index_var).astype(np.int32)
+            elif isinstance(index, slice):
+                start, stop, step = index.indices(len(self.synaptic_pre.get_value()))
+                final_indices = np.arange(start, stop, step, dtype=np.int32)
+            else:
+                final_indices = np.asarray(index)
+        elif isinstance(index, tuple):
+            if len(index) == 2:  # two indices (pre- and postsynaptic cell)
+                index = (index[0], index[1], slice(None))
+            elif len(index) > 3:
+                raise IndexError('Need 1, 2 or 3 indices, got %d.' % len(index))
+
+            I, J, K = index
+            # Convert to absolute indices (e.g. for subgroups)
+            # Allow the indexing to fail, we'll later return an empty array in
+            # that case
+            try:
+                if hasattr(I, '_indices'):  # will return absolute indices already
+                    I = I._indices()
+                else:
+                    I = self.source._indices(I)
+                pre_synapses = find_synapses(I, self.synaptic_pre.get_value())
+            except IndexError:
+                pre_synapses = np.array([], dtype=np.int32)
+            try:
+                if hasattr(J, '_indices'):
+                    J = J._indices()
+                else:
+                    J = self.target._indices(J)
+                post_synapses = find_synapses(J, self.synaptic_post.get_value())
+            except IndexError:
+                post_synapses = np.array([], dtype=np.int32)
+
+            matching_synapses = np.intersect1d(pre_synapses, post_synapses,
+                                               assume_unique=True)
+
+            if isinstance(K, slice) and K == slice(None):
+                final_indices = matching_synapses
+            else:
+                if isinstance(K, (int, slice)):
+                    test_k = slice_to_test(K)
+                else:
+                    raise NotImplementedError(('Indexing synapses with arrays not'
+                                               'implemented yet'))
+
+                # We want to access the raw arrays here, not go through the Variable
+                pre_neurons = self.synaptic_pre.get_value()[matching_synapses]
+                post_neurons = self.synaptic_post.get_value()[matching_synapses]
+                synapse_numbers = _synapse_numbers(pre_neurons,
+                                                   post_neurons)
+                final_indices = np.intersect1d(matching_synapses,
+                                      np.flatnonzero(test_k(synapse_numbers)),
+                                      assume_unique=True)
+        else:
+            raise IndexError('Unsupported index type {itype}'.format(itype=type(index)))
+
+        if index_var not in ('_idx', '0'):
+            return index_var.get_value()[final_indices.astype(np.int32)]
+        else:
+            return final_indices.astype(np.int32)
 
 class Synapses(Group):
     '''
@@ -387,8 +546,15 @@ class Synapses(Group):
         setting `core.default_float_dtype` is used.
     codeobj_class : class, optional
         The `CodeObject` class to use to run code.
+    dt : `Quantity`, optional
+        The time step to be used for the update of the state variables.
+        Cannot be combined with the `clock` argument.
     clock : `Clock`, optional
-        The clock to use.
+        The update clock to be used. If neither a clock, nor the `dt` argument
+        is specified, the `defaultclock` will be used.
+    order : int, optional
+        The priority of of this group for operations occurring at the same time
+        step and in the same scheduling slot. Defaults to 0.
     method : {str, `StateUpdateMethod`}, optional
         The numerical integration method to use. If none is given, an
         appropriate one is automatically determined.
@@ -396,20 +562,27 @@ class Synapses(Group):
         The name for this object. If none is given, a unique name of the form
         ``synapses``, ``synapses_1``, etc. will be automatically chosen.
     '''
+
+    add_to_magic_network = True
     def __init__(self, source, target=None, model=None, pre=None, post=None,
                  connect=False, delay=None, namespace=None, dtype=None,
                  codeobj_class=None,
-                 clock=None, method=None, name='synapses*'):
+                 dt=None, clock=None, order=0,
+                 method=('linear', 'euler', 'milstein'),
+                 name='synapses*'):
         self._N = 0
-        Group.__init__(self, when=clock, name=name)
+        Group.__init__(self, dt=dt, clock=clock, when='start', order=order,
+                       name=name)
         
         self.codeobj_class = codeobj_class
 
-        self.source = weakref.proxy(source)
+        self.source = source
+        self.add_dependency(source)
         if target is None:
             self.target = self.source
         else:
-            self.target = weakref.proxy(target)
+            self.target = target
+            self.add_dependency(target)
             
         ##### Prepare and validate equations
         if model is None:
@@ -423,8 +596,8 @@ class Synapses(Group):
 
         # Check flags
         model.check_flags({DIFFERENTIAL_EQUATION: ['event-driven'],
-                           SUBEXPRESSION: ['summed', 'scalar'],
-                           PARAMETER: ['constant', 'scalar']})
+                           SUBEXPRESSION: ['summed', 'shared'],
+                           PARAMETER: ['constant', 'shared']})
 
         # Add the lastupdate variable, needed for event-driven updates
         if 'lastupdate' in model._equations:
@@ -509,14 +682,15 @@ class Synapses(Group):
         # direct access to its delay via a delay attribute (instead of having
         # to use pre.delay)
         if 'pre' in self._synaptic_updaters:
-            self.variables.add_reference('delay', self.pre.variables['delay'])
+            self.variables.add_reference('delay', self.pre)
 
         #: Performs numerical integration step
         self.state_updater = None
 
         # We only need a state update if we have differential equations
         if len(self.equations.diff_eq_names):
-            self.state_updater = StateUpdater(self, method)
+            self.state_updater = StateUpdater(self, method, clock=self.clock,
+                                              order=order)
             self.contained_objects.append(self.state_updater)
 
         #: "Summed variable" mechanism -- sum over all synapses of a
@@ -569,18 +743,27 @@ class Synapses(Group):
         if not isinstance(connect, (bool, basestring)):
             raise TypeError(('"connect" keyword has to be a boolean value or a '
                              'string, is type %s instead.' % type(connect)))
+
+        # Support 2d indexing
+        self._indices = SynapticIndexing(self)
+
         self._initial_connect = connect
-        if not connect is False:
-            self.connect(connect, level=1)
 
         # Activate name attribute access
         self._enable_group_attributes()
 
+        if not connect is False:
+            self.connect(connect, level=1)
+
     def __len__(self):
-        return self._N
+        return len(self.variables['_synaptic_pre'].get_value())
+
+    def __getitem__(self, item):
+        indices = self.indices[item]
+        return SynapticSubgroup(self, indices)
 
     def before_run(self, run_namespace=None, level=0):
-        self.lastupdate = self.clock.t
+        self.lastupdate = self._clock.t
         super(Synapses, self).before_run(run_namespace, level=level+1)
 
     def _add_updater(self, code, prepost, objname=None, delay=None):
@@ -647,11 +830,12 @@ class Synapses(Group):
         self.variables.add_dynamic_array('_synaptic_post', size=0, unit=Unit(1),
                                          dtype=np.int32, constant_size=True)
 
-        self.variables.add_reference('i', self.source.variables['i'],
+        self.variables.add_reference('i', self.source, 'i',
                                      index='_presynaptic_idx')
-        self.variables.add_reference('j', self.target.variables['i'],
+        self.variables.add_reference('j', self.target, 'i',
                                      index='_postsynaptic_idx')
-
+        self.variables.create_clock_variables(self._clock,
+                                              prefix='_clock_')
         if '_offset' in self.target.variables:
             target_offset = self.target.variables['_offset'].get_value()
         else:
@@ -676,12 +860,13 @@ class Synapses(Group):
         # postsynaptic index, leading to errors for the next
         # propagation.
         self.variables.add_reference('_presynaptic_idx',
-                                     self.variables['_synaptic_pre'])
+                                     self,
+                                     '_synaptic_pre')
         self.variables.add_reference('_postsynaptic_idx',
-                                     self.variables['_synaptic_post'])
+                                     self,
+                                     '_synaptic_post')
 
         # Add the standard variables
-        self.variables.add_clock_variables(self.clock)
         self.variables.add_attribute_variable('N', Unit(1), self, '_N',
                                               constant=True)
 
@@ -689,8 +874,8 @@ class Synapses(Group):
             dtype = get_dtype(eq, user_dtype)
             if eq.type in (DIFFERENTIAL_EQUATION, PARAMETER):
                 constant = 'constant' in eq.flags
-                scalar = 'scalar' in eq.flags
-                if scalar:
+                shared = 'shared' in eq.flags
+                if shared:
                     self.variables.add_array(eq.varname, size=1,
                                              unit=eq.unit,
                                              dtype=dtype,
@@ -716,7 +901,7 @@ class Synapses(Group):
                     varname = eq.varname
                 self.variables.add_subexpression(varname, unit=eq.unit,
                                                  expr=str(eq.expr),
-                                                 scalar='scalar' in eq.flags,
+                                                 scalar='shared' in eq.flags,
                                                  dtype=dtype)
             else:
                 raise AssertionError('Unknown type of equation: ' + eq.eq_type)
@@ -726,27 +911,67 @@ class Synapses(Group):
             self.variables.add_auxiliary_variable(xi, unit=second**-0.5)
 
         # Add all the pre and post variables with _pre and _post suffixes
-        for name, var in getattr(self.source, 'variables', {}).iteritems():
+        for name in getattr(self.source, 'variables', {}).iterkeys():
+            # Raise an error if a variable name is also used for a synaptic
+            # variable (we ignore 'lastupdate' to allow connections from another
+            # Synapses object)
+            if name in equations.names and name != 'lastupdate':
+                error_msg = ('The pre-synaptic variable {name} has the same '
+                             'name as a synaptic variable, rename the synaptic '
+                             'variable ').format(name=name)
+                if name+'_syn' not in self.variables:
+                    error_msg += ("(for example to '{name}_syn') ".format(name=name))
+                error_msg += 'to avoid confusion'
+                raise ValueError(error_msg)
+            var = self.source.variables[name]
             index = '0' if var.scalar else '_presynaptic_idx'
-            self.variables.add_reference(name + '_pre', var,
-                                         index=index)
-        for name, var in getattr(self.target, 'variables', {}).iteritems():
+            try:
+                self.variables.add_reference(name + '_pre', self.source, name,
+                                             index=index)
+            except TypeError:
+                logger.debug(('Cannot include a reference to {var} in '
+                              '{synapses}, {var} uses a non-standard indexing '
+                              'in the pre-synaptic group '
+                              '{source}.').format(var=name,
+                                                  synapses=self.name,
+                                                  source=self.source.name))
+        for name in getattr(self.target, 'variables', {}).iterkeys():
+            # Raise an error if a variable name is also used for a synaptic
+            # variable (we ignore 'lastupdate' to allow connections to another
+            # Synapses object)
+            if name in equations.names and name != 'lastupdate':
+                error_msg = ("The post-synaptic variable '{name}' has the same "
+                             "name as a synaptic variable, rename the synaptic "
+                             "variable ").format(name=name)
+                if name+'_syn' not in self.variables:
+                    error_msg += ("(for example to '{name}_syn') ".format(name=name))
+                error_msg += 'to avoid confusion'
+                raise ValueError(error_msg)
+            var = self.target.variables[name]
             index = '0' if var.scalar else '_postsynaptic_idx'
-            self.variables.add_reference(name + '_post', var,
-                                         index=index)
-            # Also add all the post variables without a suffix -- note that a
-            # reference will never overwrite the name of an existing name
-            self.variables.add_reference(name, var, index=index)
+            try:
+                self.variables.add_reference(name + '_post', self.target, name,
+                                             index=index)
+                # Also add all the post variables without a suffix
+                self.variables.add_reference(name, self.target, name,
+                                             index=index)
+            except TypeError:
+                logger.debug(('Cannot include a reference to {var} in '
+                              '{synapses}, {var} uses a non-standard indexing '
+                              'in the post-synaptic group '
+                              '{target}.').format(var=name,
+                                                  synapses=self.name,
+                                                  target=self.target.name))
 
         # Check scalar subexpressions
         for eq in equations.itervalues():
-            if eq.type == SUBEXPRESSION and 'scalar' in eq.flags:
+            if eq.type == SUBEXPRESSION and 'shared' in eq.flags:
                 var = self.variables[eq.varname]
                 for identifier in var.identifiers:
                     if identifier in self.variables:
                         if not self.variables[identifier].scalar:
-                            raise SyntaxError(('Scalar subexpression %s refers '
-                                               'to non-scalar variable %s.')
+                            raise SyntaxError(('Shared subexpression %s refers '
+                                               'to non-shared variable %s.')
                                               % (eq.varname, identifier))
 
     def connect(self, pre_or_cond, post=None, p=1., n=1, namespace=None,
@@ -798,11 +1023,15 @@ class Synapses(Group):
         >>> S.connect('i == j', n=2)  # Connect all neurons to themselves with 2 synapses
         '''
         if not isinstance(pre_or_cond, (bool, basestring)):
+            if hasattr(pre_or_cond, '_indices'):
+                pre_or_cond = pre_or_cond._indices()
             pre_or_cond = np.asarray(pre_or_cond)
             if not np.issubdtype(pre_or_cond.dtype, np.int):
                 raise TypeError(('Presynaptic indices have to be given as '
                                  'integers, are type %s instead.') % pre_or_cond.dtype)
 
+            if hasattr(post, '_indices'):
+                post = post._indices()
             post = np.asarray(post)
             if not np.issubdtype(post.dtype, np.int):
                 raise TypeError(('Presynaptic indices can only be combined '
@@ -872,10 +1101,13 @@ class Synapses(Group):
                       namespace=None, level=0):
 
         if condition is None:
+            variables = Variables(self)
+
             sources = np.atleast_1d(sources).astype(np.int32)
             targets = np.atleast_1d(targets).astype(np.int32)
             n = np.atleast_1d(n)
             p = np.atleast_1d(p)
+
             if not len(p) == 1 or p != 1:
                 use_connections = np.random.rand(len(sources)) < p
                 sources = sources[use_connections]
@@ -883,28 +1115,34 @@ class Synapses(Group):
                 n = n[use_connections]
             sources = sources.repeat(n)
             targets = targets.repeat(n)
-            new_synapses = len(sources)
 
-            old_N = len(self)
-            new_N = old_N + new_synapses
-            self._resize(new_N)
-
-            # Deal with subgroups
-            if '_sub_idx' in self.source.variables:
-                real_sources = self.source.variables['_sub_idx'].get_value()[sources]
+            variables.add_array('sources', Unit(1), len(sources), dtype=np.int32,
+                                values=sources)
+            variables.add_array('targets', Unit(1), len(targets), dtype=np.int32,
+                                values=targets)
+            # These definitions are important to get the types right in C++
+            variables.add_auxiliary_variable('_real_sources', Unit(1), dtype=np.int32)
+            variables.add_auxiliary_variable('_real_targets', Unit(1), dtype=np.int32)
+            abstract_code = ''
+            if '_offset' in self.source.variables:
+                variables.add_reference('_source_offset', self.source, '_offset')
+                abstract_code += '_real_sources = sources + _source_offset\n'
             else:
-                real_sources = sources
-            if '_sub_idx' in self.target.variables:
-                real_targets = self.target.variables['_sub_idx'].get_value()[targets]
+                abstract_code += '_real_sources = sources\n'
+            if '_offset' in self.target.variables:
+                variables.add_reference('_target_offset', self.target, '_offset')
+                abstract_code += '_real_targets = targets + _target_offset\n'
             else:
-                real_targets = targets
-            self.variables['_synaptic_pre'].get_value()[old_N:new_N] = real_sources
-            self.variables['_synaptic_post'].get_value()[old_N:new_N] = real_targets
+                abstract_code += '_real_targets = targets'
 
-            self.variables['N_outgoing'].get_value()[:] += np.bincount(real_sources,
-                                                                       minlength=self.variables['N_outgoing'].size)
-            self.variables['N_incoming'].get_value()[:] += np.bincount(real_targets,
-                                                                       minlength=self.variables['N_incoming'].size)
+            codeobj = create_runner_codeobj(self,
+                                            abstract_code,
+                                            'synapses_create_array',
+                                            additional_variables=variables,
+                                            check_units=False,
+                                            run_namespace=namespace,
+                                            level=level+1)
+            codeobj()
         else:
             abstract_code = '_pre_idx = _all_pre \n'
             abstract_code += '_post_idx = _all_post \n'
@@ -917,8 +1155,8 @@ class Synapses(Group):
             # synapses but to all the possible sources/targets
             variables = Variables(None)
             # Will be set in the template
-            variables.add_auxiliary_variable('_i', unit=Unit(1))
-            variables.add_auxiliary_variable('_j', unit=Unit(1))
+            variables.add_auxiliary_variable('_i', unit=Unit(1), dtype=np.int32)
+            variables.add_auxiliary_variable('_j', unit=Unit(1), dtype=np.int32)
             # Make sure that variables have the correct type in the code
             variables.add_auxiliary_variable('_pre_idx', unit=Unit(1), dtype=np.int32)
             variables.add_auxiliary_variable('_post_idx', unit=Unit(1), dtype=np.int32)
@@ -927,14 +1165,14 @@ class Synapses(Group):
             variables.add_auxiliary_variable('_p', unit=Unit(1))
 
             if '_sub_idx' in self.source.variables:
-                variables.add_reference('_all_pre', self.source.variables['_sub_idx'])
+                variables.add_reference('_all_pre', self.source, '_sub_idx')
             else:
-                variables.add_reference('_all_pre', self.source.variables['i'])
+                variables.add_reference('_all_pre', self.source, 'i')
 
             if '_sub_idx' in self.target.variables:
-                variables.add_reference('_all_post', self.target.variables['_sub_idx'])
+                variables.add_reference('_all_post', self.target, '_sub_idx')
             else:
-                variables.add_reference('_all_post', self.target.variables['i'])
+                variables.add_reference('_all_post', self.target, 'i')
 
             variable_indices = defaultdict(lambda: '_idx')
             for varname in self.variables:
@@ -953,47 +1191,4 @@ class Synapses(Group):
                                             run_namespace=namespace,
                                             level=level+1)
             codeobj()
-
-
-    def calc_indices(self, index):
-        '''
-        Returns synaptic indices for `index`, which can be a tuple of indices
-        (including arrays and slices), a single index or a string.
-
-        '''
-        if (not isinstance(index, (tuple, basestring)) and
-                isinstance(index, (int, np.ndarray, slice,
-                                   collections.Sequence))):
-            index = (index, slice(None), slice(None))
-        if isinstance(index, tuple):
-            if len(index) == 2:  # two indices (pre- and postsynaptic cell)
-                index = (index[0], index[1], slice(None))
-            elif len(index) > 3:
-                raise IndexError('Need 1, 2 or 3 indices, got %d.' % len(index))
-
-            I, J, K = index
-
-            pre_synapses = find_synapses(I, self.variables['_synaptic_pre'].get_value() - self.source.start)
-            post_synapses = find_synapses(J, self.variables['_synaptic_post'].get_value() - self.target.start)
-            matching_synapses = np.intersect1d(pre_synapses, post_synapses,
-                                               assume_unique=True)
-
-            if isinstance(K, slice) and K == slice(None):
-                return matching_synapses
-            elif isinstance(K, (int, slice)):
-                test_k = slice_to_test(K)
-            else:
-                raise NotImplementedError(('Indexing synapses with arrays not'
-                                           'implemented yet'))
-
-            # We want to access the raw arrays here, not go through the Variable
-            pre_neurons = self.variables['_synaptic_pre'].get_value()[pre_synapses]
-            post_neurons = self.variables['_synaptic_post'].get_value()[post_synapses]
-            synapse_numbers = _synapse_numbers(pre_neurons,
-                                               post_neurons)
-            return np.intersect1d(matching_synapses,
-                                  np.flatnonzero(test_k(synapse_numbers)),
-                                  assume_unique=True)
-        else:
-            raise IndexError('Unsupported index type {itype}'.format(itype=type(index)))
 

@@ -14,11 +14,36 @@ suite with::
 	$ nosetests brian2 --with-doctest
 
 This should show no errors or failures but possibly a number of skipped tests.
-Alternatively you can import brian2 and call the test function, e.g. in an
-interactive Python session::
+The recommended way however is to import brian2 and call the test function,
+which gives you convenient control over which tests are run::
 
 	>>> import brian2
 	>>> brian2.test() 
+
+By default, this runs the test suite for all available (runtime) code generation
+targets. If you only want to test a specific target, provide it as an argument::
+
+    >>> brian2.test('numpy')
+
+If you want to test several targets, use a list of targets::
+
+    >>> brian2.test(['weave', 'cython'])
+
+
+In addition to the tests specific to a code generation target, the test suite
+will also run a set of independent tests (e.g. parsing of equations, unit
+system, utility functions, etc.). To exclude these tests, set the
+``test_codegen_independent`` argument to ``False``. Not all available tests are
+run by default, tests that take a long time are excluded. To include these, set
+``long_tests`` to ``True``.
+
+To run the C++ standalone tests, you have to set the ``test_standalone``
+argument to the name of a standalone device. If you provide an empty argument
+for the runtime code generation targets, you will only run the standalone
+tests::
+
+    >>> brian2.test([], test_standalone='cpp_standalone')
+
 
 Checking the code coverage
 ~~~~~~~~~~~~~~~~~~~~~~~~~~
@@ -74,6 +99,79 @@ mechanism <logging>` for details
 For simple functions, doctests (see below) are a great alternative to writing
 classical unit tests.
 
+By default, all tests are executed for all selected code generation targets
+(see `Running the test suite`_ above). This is not useful for all tests, some
+basic tests that for example test equation syntax or the use of physical units
+do not depend on code generation and need therefore not to be repeated. To
+execute such tests only once, they can be annotated with a
+``codegen-independent`` attribute, using the `~nose.plugins.attrib.attr`
+decorator::
+
+    from nose.plugins.attrib import attr
+    from brian2 import NeuronGroup
+
+    @attr('codegen-independent')
+    def test_simple():
+        # Test that the length of a NeuronGroup is correct
+        group = NeuronGroup(5, '')
+        assert len(group) == 5
+
+Tests that are not "codegen-independent" are by default only executed for the
+runtimes device, i.e. not for the ``cpp_standalone`` device, for example.
+However, many of those tests follow a common pattern that is compatible with
+standalone devices as well: they set up a network, run it, and check the state
+of the network afterwards. Such tests can be marked as
+``standalone-compatible``, using the `~nose.plugins.attrib.attr` decorator in
+the same way as for ``codegen-independent`` tests. Since standalone devices
+usually have an internal state where they store information about arrays,
+array assignments, etc., they need to be reinitialized after such a test. For
+that use the `~nose.with_setup` decorator and provide the
+`~brian2.devices.device.restore_device` function as the ``teardown``
+argument::
+
+    from nose import with_setup
+    from nose.plugins.attrib import attr
+    from numpy.testing.utils import assert_equal
+    from brian2 import *
+    from brian2.devices.device import restore_device
+
+    @attr('standalone-compatible')
+    @with_setup(teardown=restore_initial_state)
+    def test_simple_run():
+        # Check that parameter values of a neuron don't change after a run
+        group = NeuronGroup(5, 'v : volt')
+        group.v = 'i*mV'
+        run(1*ms)
+        assert_equal(group.v[:], np.arange(5)*mV)
+
+As a rule of thumb:
+
+* If a test does not have a `~brian2.core.network.Network.run` call, mark it as
+  ``codegen-independent``
+* If a test has only a single `~brian2.core.network.Network.run` and only reads state variable
+  values after the run, mark it as ``standalone-compatible`` and register the
+  `~brian2.devices.device.restore_device` teardown function
+
+Tests can also be written specifically for a standalone device (they then have
+to include the `~brian2.devices.device.set_device` and
+`~brian2.devices.device.Device.build` calls explicitly). In this case tests
+have to be annotated with the name of the device (e.g. ``'cpp_standalone'``)
+and with ``'standalone-only'`` to exclude this test from the runtime tests.
+Also, the device should be restored in the end::
+
+    from nose import with_setup
+    from nose.plugins.attrib import attr
+    from brian2 import *
+    from brian2.devices.device import restore_device
+
+    @attr('cpp_standalone', 'standalone-only')
+    @with_setup(teardown=restore_initial_state)
+    def test_cpp_standalone():
+        set_device('cpp_standalone')
+        # set up simulation
+        # run simulation
+        device.build(...)
+        # check simulation results
 
 Doctests
 ~~~~~~~~
@@ -109,6 +207,29 @@ date!
 .. _`doctest documentation`: http://docs.python.org/2/library/doctest.html
 .. _`Sphinx's doctest extension`: http://sphinx-doc.org/ext/doctest.html
 
+Test attributes
+~~~~~~~~~~~~~~~
+
+As explained above, the test suite can be run with different subsets of the
+available tests. For this, tests have to be annotated with the ``attr``
+decorator available from ``nose.plugins.attrib``. Currently, the following
+attributes are understood:
+
+* **standalone**: A C++ standalone test (not run by default when calling ``brian2.test()``)
+* **codegen-independent**: A test that does not use any code generation (run by default)
+* **long**: A test that takes a long time to run (not run by default)
+
+Attributes can be simply given as a string argument to the ``attr`` decorator:
+
+.. code-block:: python
+   :emphasize-lines: 3
+
+    from nose.plugins.attrib import attr
+
+    @attr('standalone')
+    test_for_standalone():
+        pass  # ...
+
 Correctness tests
 ~~~~~~~~~~~~~~~~~
 [These do not exist yet for brian2]. Unit tests test a specific function or
@@ -119,4 +240,4 @@ the spiking activity of a complex network), a useful check is also whether the
 result is *consistent*. For example, the spiking activity should be the same
 when using code generation for Python or C++. Or, a network could be pickled
 before running and then the result of the run could be compared to a second run
-that starts from the unpickled network.  
+that starts from the unpickled network.

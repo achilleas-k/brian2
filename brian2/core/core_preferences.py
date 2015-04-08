@@ -4,12 +4,13 @@ Brian preferences.
 '''
 from numpy import float64, int32
 
-from brian2.core.preferences import BrianPreference, brian_prefs
+from brian2.core.preferences import BrianPreference, prefs
+
 
 def dtype_repr(dtype):
     return dtype.__name__
 
-brian_prefs.register_preferences('core', 'Core Brian preferences',
+prefs.register_preferences('core', 'Core Brian preferences',
     default_float_dtype=BrianPreference(
         default=float64,
         docs='''
@@ -20,8 +21,15 @@ brian_prefs.register_preferences('core', 'Core Brian preferences',
     default_integer_dtype=BrianPreference(
         default=int32,
         docs='''
-        Default dtype for all arrays of integer scalars'
+        Default dtype for all arrays of integer scalars.
         ''',
         representor=dtype_repr,
+        ),
+    outdated_dependency_error=BrianPreference(
+        default=True,
+        docs='''
+        Whether to raise an error for outdated dependencies (``True``) or just
+        a warning (``False``).
+        '''
         )
     )

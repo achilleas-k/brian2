@@ -7,12 +7,17 @@
 
 {% set _non_synaptic = [] %}
 {% for var in variables %}
-    {% if variable_indices[var] != '_idx' %}
+    {% if variable_indices[var] not in ('_idx', '0') %}
         {# This is a trick to get around the scoping problem #}
         {% if _non_synaptic.append(1) %}{% endif %}
     {% endif %}
 {% endfor %}
 
+# scalar code
+{# Note that we don't write to scalar variables conditionally. The scalar code
+   should therefore only include the calculation of scalar expressions
+   that are used below for writing to a vector variable #}
+{{scalar_code|autoindent}}
 
 {% if _non_synaptic %}
 # Use the complicated propagation algorithm
@@ -36,12 +41,6 @@ while len(_F):
     _F = np.extract(_flag.take(_F), _F)
 {% else %}
 # use the simple propagation algorithm
-
-# scalar code
-{# Note that we don't write to scalar variables conditionally. The scalar code
-   should therefore only include the calculation of scalar expressions
-   that are used below for writing to a vector variable #}
-{{scalar_code|autoindent}}
 
 # vector code
 _idx = _spiking_synapses

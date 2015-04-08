@@ -5,16 +5,25 @@ Brian2 setup script
 import sys
 import os
 
+if sys.version_info < (2, 7):
+    raise RuntimeError('Only Python versions >= 2.7 are supported')
+
 # This will automatically download setuptools if it is not already installed
 from ez_setup import use_setuptools
 use_setuptools()
 
 import pkg_resources
+from pkg_resources import parse_version
 from setuptools import setup, find_packages, Extension
 from setuptools.command.build_ext import build_ext
 from distutils.errors import CompileError, DistutilsPlatformError
 
+REQUIRED_CYTHON_VERSION = '0.18'
+
 try:
+    import Cython
+    if parse_version(Cython.__version__) < parse_version(REQUIRED_CYTHON_VERSION):
+        raise ImportError('Cython version %s is too old' % Cython.__version__)
     from Cython.Build import cythonize
     cython_available = True
 except ImportError:
@@ -43,15 +52,15 @@ cpp_fname = os.path.join('brian2', 'synapses', 'cythonspikequeue.cpp')
 if WITH_CYTHON or not os.path.exists(cpp_fname):
     fname = pyx_fname
     if not cython_available:
-        if FAIL_ON_ERROR:
+        if FAIL_ON_ERROR and WITH_CYTHON:
             raise RuntimeError('Compilation with Cython requested/necesary but '
-                               'Cython is not available.')
+                               'Cython >= %s is not available.' % REQUIRED_CYTHON_VERSION)
         else:
             sys.stderr.write('Compilation with Cython requested/necesary but '
-                             'Cython is not available.\n')
+                             'Cython >= %s is not available.\n' % REQUIRED_CYTHON_VERSION)
             fname = None
     if not os.path.exists(pyx_fname):
-        if FAIL_ON_ERROR:
+        if FAIL_ON_ERROR and WITH_CYTHON:
             raise RuntimeError(('Compilation with Cython requested/necessary but '
                                 'Cython source file %s does not exist') % pyx_fname)
         else:
@@ -108,7 +117,7 @@ and easily extensible. It is based on a code generation framework that allows
 to execute simulations using other programming languages and/or on different
 devices.
 
-We currently consider this software to be in the alpha status, please report
+We currently consider this software to be in the beta status, please report
 issues to the github issue tracker (https://github.com/brian-team/brian2/issues) or to the
 brian-development mailing list (http://groups.google.com/group/brian-development/)
 
@@ -116,29 +125,30 @@ Documentation for Brian2 can be found at http://brian2.readthedocs.org
 '''
 
 setup(name='Brian2',
-      version='2.0a8',
+      version='2.0b2+git',
       packages=find_packages(),
       package_data={# include template files
                     'brian2.codegen.runtime.numpy_rt': ['templates/*.py_'],
+                    'brian2.codegen.runtime.cython_rt': ['templates/*.pyx'],
                     'brian2.codegen.runtime.weave_rt': ['templates/*.cpp',
                                                         'templates/*.h'],
                     'brian2.devices.cpp_standalone': ['templates/*.cpp',
                                                       'templates/*.h',
                                                       'templates/makefile',
+                                                      'templates/win_makefile',
                                                       'brianlib/*.cpp',
                                                       'brianlib/*.h'],
                     # include C++ version of spike queue
-                    'brian2.synapses': ['*.cpp'],
+                    'brian2.synapses': ['*.cpp', '*.h'],
                     # include default_preferences file
                     'brian2': ['default_preferences']
                     },
-      install_requires=['numpy>=1.4.1',
-                        'scipy>=0.7.0',
-                        'sympy>=0.7.3',
+      install_requires=['numpy>=1.8.0',
+                        'sympy>=0.7.6',
                         'pyparsing',
                         'jinja2>=2.7',
                        ],
-      setup_requires=['numpy>=1.4.1'],
+      setup_requires=['numpy>=1.8.0'],
       cmdclass={'build_ext': optional_build_ext},
       provides=['brian2'],
       extras_require={'test': ['nosetests>=1.0'],
@@ -151,7 +161,7 @@ setup(name='Brian2',
       author='Marcel Stimberg, Dan Goodman, Romain Brette',
       author_email='Romain.Brette at ens.fr',
       classifiers=[
-          'Development Status :: 3 - Alpha',
+          'Development Status :: 4 - Beta',
           'Intended Audience :: Science/Research',
           'License :: OSI Approved',
           'Natural Language :: English',

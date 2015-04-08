@@ -1,6 +1,30 @@
 Changes from Brian 1
 ====================
 
+In most cases, Brian 2 works in a very similar way to Brian 1 but there are
+some important differences to be aware of. The major distinction is that
+in Brian 2 you need to be more explicit about the definition of your
+simulation in order to avoid inadvertent errors. For example, the equations
+defining thresholds, resets and refractoriness have to be fully explicitly
+specified strings. In addition, some cases where you could use the
+'magic network' system in Brian 1 won't work in Brian 2 and you'll get an
+error telling you that you need to create an explicit `Network` object.
+
+The old system of ``Connection`` and related synaptic objects such as
+``STDP`` and ``STP`` have been removed and replaced with the new
+`Synapses` class.
+
+A slightly technical change that might have a significant impact on your code
+is that the way 'namespaces' are handled has changed. You can now change the
+value of parameters specified outside of equations between simulation runs,
+as well as changing the ``dt`` value of the simulation between runs.
+
+The units system has also been modified so that now arrays have a unit instead
+of just single values. Finally, a number of objects and classes have been
+removed or simplified.
+
+For more details, see below.
+
 Major interface changes
 -----------------------
 
@@ -17,9 +41,28 @@ be used for thresholding and reset. This entails:
 * When a variable should be clamped during refractoriness (in Brian 1, the
   membrane potential was clamped by default), it has to be explicitly marked
   with the flag ``(unless refractory)`` in the equations
-* An object such as `NeuronGroup` either uses an explicitly specified `Clock`
-  or the `defaultclock` instead of using a clock defined in the current
-  execution frame, if it exists
+
+Clocks and networks
+~~~~~~~~~~~~~~~~~~~
+
+Brian's system of handling clocks and networks has been substantially
+changed. You now usually specify a value of ``dt`` either globally or
+explicitly for each object rather than creating clocks (although this is
+still possible).
+
+More importantly, the behaviour of networks is different:
+
+* Either you create a `Network` of objects you want to simulate explicitly,
+  or you use the 'magic' system which now simulates all named objects in
+  the context where you run it.
+* The magic network will now raise errors if you try to do something where
+  it cannot accurately guess what you mean. In these situations, we recommend
+  using an explicit `Network`.
+* Objects can now only belong to a single `Network` object, in order to avoid
+  inadvertent errors.
+* Similarly, you can no longer change the time explicitly: the only way the
+  time changes is by running a simulation. Instead, you can `store` and
+  `restore` the state of a `Network` (including the time).
 
 Removed classes
 ~~~~~~~~~~~~~~~
@@ -27,7 +70,7 @@ Removed classes
 Several classes have been merged or are replaced by string-based model
 specifications:
 
-* *Connections* and  *STDP* are replaced by `Synapses`
+* *Connections*, *STP* and  *STDP* are replaced by `Synapses`
 * All reset and refractoriness classes (*VariableReset*,
   *CustomRefractoriness*, etc.) are replaced by the new string-based reset
   and refractoriness mechanisms, see :doc:`../user/models` and
@@ -90,10 +133,18 @@ Miscellaneous changes
 ~~~~~~~~~~~~~~~~~~~~~
 * New preferences system (see :doc:`../developer/preferences`)
 * New handling of namespaces (see :doc:`../user/equations`)
-* New "magic" and clock system (see :doc:`../developer/new_magic_and_clocks`)
+* New "magic" and clock system (see :doc:`../advanced/scheduling` and
+  :doc:`../user/running`)
 * New refractoriness system (see :doc:`../user/refractoriness`)
 * More powerful string expressions that can also be used as indices for state
   variables (see e.g. :doc:`../user/synapses`)
+* "Brian Hears" is being rewritten, but there is a bridge to the version
+  included in Brian 1 until the new version is written (see
+  :doc:`../user/brian1hears_bridge`)
+* `Equations` objects no longer save their namespace, they now behave just
+  like strings.
+* There is no longer any ``reinit()`` mechanism, this is now handled by
+  `store` and `restore`.
 
 Changes in the internal processing
 ----------------------------------

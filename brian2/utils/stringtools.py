@@ -3,15 +3,18 @@ A collection of tools for string formatting tasks.
 """
 
 import re
+import string
 
 __all__ = ['indent',
            'deindent',
            'word_substitute',
+           'replace',
            'get_identifiers',
            'strip_empty_lines',
            'stripped_deindented_lines',
            'strip_empty_leading_and_trailing_lines',
            'code_representation',
+           'SpellChecker'
            ]
 
 def indent(text, numtabs=1, spacespertab=4, tab=None):
@@ -136,24 +139,56 @@ def word_substitute(expr, substitutions):
     return expr
 
 
-KEYWORDS = set(['and', 'or', 'not', 'True', 'False'])
+def replace(s, substitutions):
+    '''
+    Applies a dictionary of substitutions. Simpler than `word_substitute`, it
+    does not attempt to only replace words
+    '''
+    for before, after in substitutions.iteritems():
+        s = s.replace(before, after)
+    return s
 
-def get_identifiers(expr):
+
+KEYWORDS = {'and', 'or', 'not', 'True', 'False'}
+
+
+def get_identifiers(expr, include_numbers=False):
     '''
     Return all the identifiers in a given string ``expr``, that is everything
     that matches a programming language variable like expression, which is
     here implemented as the regexp ``\\b[A-Za-z_][A-Za-z0-9_]*\\b``.
-    
+
+    Parameters
+    ----------
+    expr : str
+        The string to analyze
+    include_numbers : bool, optional
+        Whether to include number literals in the output. Defaults to ``False``.
+
+    Returns
+    -------
+    identifiers : set
+        A set of all the identifiers (and, optionally, numbers) in `expr`.
+
     Examples
     --------
-    
-    >>> expr = 'a*_b+c5+8+f(A)'
+    >>> expr = '3-a*_b+c5+8+f(A - .3e-10, tau_2)*17'
     >>> ids = get_identifiers(expr)
     >>> print(sorted(list(ids)))
-    ['A', '_b', 'a', 'c5', 'f']
+    ['A', '_b', 'a', 'c5', 'f', 'tau_2']
+    >>> ids = get_identifiers(expr, include_numbers=True)
+    >>> print(sorted(list(ids)))
+    ['.3e-10', '17', '3', '8', 'A', '_b', 'a', 'c5', 'f', 'tau_2']
     '''
     identifiers = set(re.findall(r'\b[A-Za-z_][A-Za-z0-9_]*\b', expr))
-    return identifiers - KEYWORDS
+    if include_numbers:
+        # only the number, not a + or -
+        numbers = set(re.findall(r'(?<=[^A-Za-z_])[0-9]*\.?[0-9]+(?:[eE][-+]?[0-9]+)?|^[0-9]*\.?[0-9]+(?:[eE][-+]?[0-9]+)?',
+                                 expr))
+    else:
+        numbers = set()
+    return (identifiers - KEYWORDS) | numbers
+
 
 def strip_empty_lines(s):
     '''
@@ -219,3 +254,42 @@ def code_representation(code):
         msg += indent(str(v))
         output.append(msg)
     return strip_empty_leading_and_trailing_lines('\n'.join(output))
+
+
+# The below is adapted from Peter Norvig's spelling corrector
+# http://norvig.com/spell.py (MIT licensed)
+class SpellChecker(object):
+    '''
+    A simple spell checker that will be used to suggest the correct name if the
+    user made a typo (e.g. for state variable names).
+
+    Parameters
+    ----------
+    words : iterable of str
+        The known words
+    alphabet : iterable of str, optional
+        The allowed characters. Defaults to the characters allowed for
+        identifiers, i.e. ascii characters, digits and the underscore.
+    '''
+    def __init__(self, words,
+                 alphabet=string.ascii_lowercase+string.digits+'_'):
+        self.words = words
+        self.alphabet = alphabet
+
+    def edits1(self, word):
+       s = [(word[:i], word[i:]) for i in range(len(word) + 1)]
+       deletes    = [a + b[1:] for a, b in s if b]
+       transposes = [a + b[1] + b[0] + b[2:] for a, b in s if len(b)>1]
+       replaces   = [a + c + b[1:] for a, b in s for c in self.alphabet if b]
+       inserts    = [a + c + b     for a, b in s for c in self.alphabet]
+       return set(deletes + transposes + replaces + inserts)
+
+    def known_edits2(self, word):
+        return set(e2 for e1 in self.edits1(word)
+                   for e2 in self.edits1(e1) if e2 in self.words)
+
+    def known(self, words):
+        return set(w for w in words if w in self.words)
+
+    def suggest(self, word):
+        return self.known(self.edits1(word)) or self.known_edits2(word) or set()

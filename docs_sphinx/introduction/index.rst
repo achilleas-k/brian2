@@ -5,5 +5,6 @@ Introduction
    :maxdepth: 1
 
    install
+   release_notes
    changes
-   import
+   known_issues

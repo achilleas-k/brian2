@@ -2,6 +2,7 @@
 Module containing the `Device` base class as well as the `RuntimeDevice`
 implementation and some helper functions to access/set devices.
 '''
+from weakref import WeakKeyDictionary
 
 import numpy as np
 
@@ -9,7 +10,7 @@ from brian2.memory.dynamicarray import DynamicArray, DynamicArray1D
 from brian2.codegen.targets import codegen_targets
 from brian2.codegen.runtime.numpy_rt import NumpyCodeObject
 from brian2.core.names import find_name
-from brian2.core.preferences import brian_prefs
+from brian2.core.preferences import prefs
 from brian2.core.variables import ArrayVariable, DynamicArrayVariable
 from brian2.core.functions import Function
 from brian2.utils.logger import get_logger
@@ -17,8 +18,7 @@ from brian2.utils.stringtools import code_representation, indent
 
 __all__ = ['Device', 'RuntimeDevice',
            'get_device', 'set_device',
-           'all_devices',
-           'device_override',
+           'all_devices', 'restore_device',
            'device',
            ]
 
@@ -27,20 +27,65 @@ logger = get_logger(__name__)
 all_devices = {}
 
 
-def get_default_codeobject_class():
+prefs.register_preferences('devices', 'Device preferences')
+
+
+#: caches the automatically determined code generation target
+_auto_target = None
+
+def auto_target():
+    '''
+    Automatically chose a code generation target (invoked when the
+    `codegen.target` preference is set to `'auto'`. Caches its result so it
+    only does the check once. Prefers weave > cython > numpy.
+
+    Returns
+    -------
+    target : class derived from `CodeObject`
+        The target to use
+    '''
+    global _auto_target
+    if _auto_target is None:
+        target_dict = dict((target.class_name, target)
+                           for target in codegen_targets
+                           if target.class_name)
+        using_fallback = False
+        if 'weave' in target_dict and target_dict['weave'].is_available():
+            _auto_target = target_dict['weave']
+        elif 'cython' in target_dict and target_dict['cython'].is_available():
+            _auto_target = target_dict['cython']
+        else:
+            _auto_target = target_dict['numpy']
+            using_fallback = True
+
+        if using_fallback:
+            logger.warn('Cannot use compiled code, falling back to the numpy '
+                        'code generation target. Note that this will likely '
+                        'be slower than using compiled code.',
+                        'codegen_fallback')
+        else:
+            logger.info(('Chosing %r as the code generation '
+                         'target.') % _auto_target.class_name)
+
+    return _auto_target
+
+def get_default_codeobject_class(pref='codegen.target'):
     '''
     Returns the default `CodeObject` class from the preferences.
     '''
-    codeobj_class = brian_prefs['codegen.target']
+    codeobj_class = prefs[pref]
     if isinstance(codeobj_class, str):
+        if codeobj_class == 'auto':
+            return auto_target()
         for target in codegen_targets:
             if target.class_name == codeobj_class:
                 return target
         # No target found
+        targets = ['auto'] + [target.class_name
+                              for target in codegen_targets
+                              if target.class_name]
         raise ValueError("Unknown code generation target: %s, should be "
-                         " one of %s"%(codeobj_class,
-                                       [target.class_name
-                                        for target in codegen_targets]))
+                         " one of %s" % (codeobj_class, targets))
     return codeobj_class
 
 
@@ -164,7 +209,9 @@ class Device(object):
                                                   iterate_all=iterate_all,
                                                   codeobj_class=codeobj_class,
                                                   override_conditional_write=override_conditional_write,
-                                                  allows_scalar_write=template.allows_scalar_write)
+                                                  allows_scalar_write=template.allows_scalar_write,
+                                                  name=name,
+                                                  template_name=template_name)
         if template_kwds is None:
             template_kwds = dict()
         else:
@@ -186,7 +233,7 @@ class Device(object):
         logger.debug('%s abstract code:\n%s' % (name, indent(code_representation(abstract_code))))
 
         scalar_code, vector_code, kwds = generator.translate(abstract_code,
-                                                             dtype=brian_prefs['core.default_float_dtype'])
+                                                             dtype=prefs['core.default_float_dtype'])
         # Add the array names as keywords as well
         for varname, var in variables.iteritems():
             if isinstance(var, ArrayVariable):
@@ -211,7 +258,10 @@ class Device(object):
                         **template_kwds)
         logger.debug('%s code:\n%s' % (name, indent(code_representation(code))))
 
-        codeobj = codeobj_class(owner, code, variables, name=name)
+        codeobj = codeobj_class(owner, code, variables, variable_indices,
+                                template_name=template_name,
+                                template_source=template.template_source,
+                                name=name)
         codeobj.compile()
         return codeobj
     
@@ -222,6 +272,11 @@ class Device(object):
         pass
 
     def insert_device_code(self, slot, code):
+        # Deprecated
+        raise AttributeError("The method 'insert_device_code' has been renamed "
+                             "to 'insert_code'.")
+
+    def insert_code(self, slot, code):
         '''
         Insert code directly into a given slot in the device. By default does nothing.
         '''
@@ -232,16 +287,26 @@ class Device(object):
         For standalone projects, called when the project is ready to be built. Does nothing for runtime mode.
         '''
         pass
+
+    def reinit(self):
+        '''
+        Reinitialize the device. For standalone devices, clears all the internal
+        state of the device.
+        '''
+        pass
     
     
 class RuntimeDevice(Device):
     '''
+    The default device used in Brian, state variables are stored as numpy
+    arrays in memory.
     '''
     def __init__(self):
         super(Device, self).__init__()
         #: Mapping from `Variable` objects to numpy arrays (or `DynamicArray`
-        #: objects)
-        self.arrays = {}
+        #: objects). Arrays in this dictionary will disappear as soon as the
+        #: last reference to the `Variable` object used as a key is gone
+        self.arrays = WeakKeyDictionary()
         
     def get_array_name(self, var, access_data=True):
         # if no owner is set, this is a temporary object (e.g. the array
@@ -293,6 +358,9 @@ class RuntimeDevice(Device):
     def fill_with_array(self, var, arr):
         self.arrays[var][:] = arr
 
+    def init_with_array(self, var, arr):
+        self.arrays[var][:] = arr
+
     def spike_queue(self, source_start, source_end):
         # Use the C++ version of the SpikeQueue when available
         try:
@@ -334,8 +402,14 @@ class CurrentDeviceProxy(object):
     '''
     def __getattr__(self, name):
         if not hasattr(active_device, name):
-            logger.warn("Active device does not have an attribute '%s', ignoring this" % name)
-            attr = Dummy()
+            if name.startswith('_'):
+                # Do not fake private/magic attributes
+                raise AttributeError(('Active device does not have an '
+                                      'attribute %s') % name)
+            else:
+                logger.warn(("Active device does not have an attribute '%s', "
+                             "ignoring this") % name)
+                attr = Dummy()
         else:
             attr = getattr(active_device, name)
         return attr
@@ -351,6 +425,7 @@ def get_device():
     global active_device
     return active_device
 
+
 def set_device(device):
     '''
     Sets the active `Device` object
@@ -362,22 +437,9 @@ def set_device(device):
     active_device.activate()
 
 
-def device_override(name):
-    '''
-    Decorates a function/method to allow it to be overridden by the current `Device`.
-    
-    The ``name`` is the function name in the `Device` to use as an override if it exists.
-    '''
-    def device_override_decorator(func):
-        def device_override_decorated_function(*args, **kwds):
-            curdev = get_device()
-            if hasattr(curdev, name):
-                return getattr(curdev, name)(*args, **kwds)
-            else:
-                return func(*args, **kwds)
-        
-        device_override_decorated_function.__doc__ = func.__doc__
-        
-        return device_override_decorated_function
-    
-    return device_override_decorator
+def restore_device():
+    from brian2 import restore_initial_state  # avoids circular import
+
+    for device in all_devices.itervalues():
+        device.reinit()
+    restore_initial_state()

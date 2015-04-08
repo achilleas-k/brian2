@@ -8,11 +8,17 @@ Contents:
    :titlesonly:
 
    introduction/index
+   resources/tutorials/index
    user/index
+   advanced/index
+
+.. toctree::
+   :maxdepth: 1
+   :titlesonly:
+
+   examples/index
    Reference documentation <reference/brian2>
    developer/index
-   notes
-   examples/index
 
 Indices and tables
 ==================

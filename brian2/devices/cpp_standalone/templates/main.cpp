@@ -1,6 +1,9 @@
-#include<stdlib.h>
+{# IS_OPENMP_COMPATIBLE #}
+#include <stdlib.h>
 #include "objects.h"
-#include<ctime>
+#include <ctime>
+#include <time.h>
+{{ openmp_pragma('include') }}
 #include "run.h"
 
 {% for codeobj in code_objects %}
@@ -11,21 +14,22 @@
 #include "{{name}}"
 {% endfor %}
 
-#include<iostream>
+#include <iostream>
+#include <fstream>
+
+{{report_func|autoindent}}
 
 int main(int argc, char **argv)
 {
-	std::clock_t start = std::clock();
 
 	brian_start();
 
 	{
 		using namespace brian;
+
+		{{ openmp_pragma('set_num_threads') }}
         {{main_lines|autoindent}}
 	}
-
-	double _run_duration = (std::clock()-start)/(double)CLOCKS_PER_SEC;
-	std::cout << "Simulation time: " << _run_duration << endl;
 
 	brian_end();
 

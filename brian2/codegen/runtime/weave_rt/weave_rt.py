@@ -1,53 +1,39 @@
 '''
 Module providing `WeaveCodeObject`.
 '''
-
+import os
+import sys
 import numpy
+from distutils.ccompiler import get_default_compiler
 
 try:
     from scipy import weave
     from scipy.weave.c_spec import num_to_c_types
 except ImportError:
-    # No weave for Python 3
-    weave = None
+    try:  # weave as an independent package
+        import weave
+        from weave.c_spec import num_to_c_types
+    except ImportError:
+        # No weave for Python 3
+        weave = None
 
 from brian2.core.variables import (DynamicArrayVariable, ArrayVariable,
                                    AttributeVariable, AuxiliaryVariable,
                                    Subexpression)
-from brian2.core.preferences import brian_prefs, BrianPreference
+from brian2.core.preferences import prefs, BrianPreference
 from brian2.core.functions import DEFAULT_FUNCTIONS
+from brian2.utils.logger import std_silent, get_logger
 
 from ...codeobject import CodeObject
 from ...templates import Templater
 from ...generators.cpp_generator import CPPCodeGenerator
 from ...targets import codegen_targets
+from ...cpp_prefs import get_compiler_and_args
 
 __all__ = ['WeaveCodeObject', 'WeaveCodeGenerator']
 
-# Preferences
-brian_prefs.register_preferences(
-    'codegen.runtime.weave',
-    'Weave runtime codegen preferences',
-    compiler = BrianPreference(
-        default='gcc',
-        validator=lambda pref: pref=='gcc',
-        docs='''
-        Compiler to use for weave.
-        '''
-        ),
-    extra_compile_args = BrianPreference(
-        default=['-w', '-O3', '-ffast-math'],
-        docs='''
-        Extra compile arguments to pass to compiler
-        '''
-        ),
-    include_dirs = BrianPreference(
-        default=[],
-        docs='''
-        Include directories to use.
-        '''
-        )
-    )
+
+logger = get_logger(__name__)
 
 
 def weave_data_type(dtype):
@@ -75,6 +61,16 @@ class WeaveCodeGenerator(CPPCodeGenerator):
         self.c_data_type = weave_data_type
 
 
+def compiler_defines(compiler):
+    if compiler == 'msvc':
+        return '''
+#define INFINITY (std::numeric_limits<double>::infinity())
+#define NAN (std::numeric_limits<double>::quiet_NaN())
+#define M_PI 3.14159265358979323846
+        '''
+    return ''
+
+
 class WeaveCodeObject(CodeObject):
     '''
     Weave code object
@@ -89,16 +85,63 @@ class WeaveCodeObject(CodeObject):
     generator_class = WeaveCodeGenerator
     class_name = 'weave'
 
-    def __init__(self, owner, code, variables, name='weave_code_object*'):
+    def __init__(self, owner, code, variables, variable_indices,
+                 template_name, template_source, name='weave_code_object*'):
         from brian2.devices.device import get_device
         self.device = get_device()
+        self._done_first_run = False
         self.namespace = {'_owner': owner}
-        super(WeaveCodeObject, self).__init__(owner, code, variables, name=name)
-        self.compiler = brian_prefs['codegen.runtime.weave.compiler']
-        self.extra_compile_args = brian_prefs['codegen.runtime.weave.extra_compile_args']
-        self.include_dirs = brian_prefs['codegen.runtime.weave.include_dirs']
+        super(WeaveCodeObject, self).__init__(owner, code, variables,
+                                              variable_indices,
+                                              template_name, template_source,
+                                              name=name)
+        self.compiler, self.extra_compile_args = get_compiler_and_args()
+        self.include_dirs = list(prefs['codegen.cpp.include_dirs'])
+        self.include_dirs += [os.path.join(sys.prefix, 'include')]
+        self.code.support_code = compiler_defines(self.compiler)+self.code.support_code
+        self.annotated_code = compiler_defines(self.compiler)+self.code.main+'''
+/*
+The following code is just compiler options for the call to weave.inline.
+By including them here, we force a recompile if the compiler options change,
+which is a good thing (e.g. switching -ffast-math on and off).
+
+support_code:
+{support_code}
+
+compiler:
+{compiler}
+
+extra_compile_args:
+{extra_compile_args}
+
+include_dirs:
+{include_dirs}
+*/
+        '''.format(support_code=self.code.support_code,
+                   compiler=self.compiler,
+                   extra_compile_args=self.extra_compile_args,
+                   include_dirs=self.include_dirs)
+            
         self.python_code_namespace = {'_owner': owner}
         self.variables_to_namespace()
+
+    @staticmethod
+    def is_available():
+        try:
+            with std_silent(False):
+                compiler, extra_compile_args = get_compiler_and_args()
+                weave.inline('int x=0;', [],
+                             compiler=compiler,
+                             headers=['<algorithm>', '<limits>'],
+                             extra_compile_args=extra_compile_args,
+                             verbose=0)
+                return True
+        except Exception as ex:
+            logger.warn(('Cannot use weave, a test compilation '
+                         'failed: %s (%s)' % (str(ex),
+                                              ex.__class__.__name__)) ,
+                        'failed_compile_test')
+            return False
 
     def variables_to_namespace(self):
 
@@ -159,23 +202,32 @@ class WeaveCodeObject(CodeObject):
         CodeObject.compile(self)
         if hasattr(self.code, 'python_pre'):
             self.compiled_python_pre = compile(self.code.python_pre, '(string)', 'exec')
+        else:
+            self.compiled_python_pre = None
         if hasattr(self.code, 'python_post'):
             self.compiled_python_post = compile(self.code.python_post, '(string)', 'exec')
+        else:
+            self.compiled_python_post = None
 
     def run(self):
-        if hasattr(self, 'compiled_python_pre'):
+        if self.compiled_python_pre is not None:
             exec self.compiled_python_pre in self.python_code_namespace
-        ret_val = weave.inline(self.code.main, self.namespace.keys(),
-                               local_dict=self.namespace,
-                               support_code=self.code.support_code,
-                               compiler=self.compiler,
-                               extra_compile_args=self.extra_compile_args,
-                               include_dirs=self.include_dirs)
-        if hasattr(self, 'compiled_python_post'):
+        with std_silent(self._done_first_run):
+            ret_val = weave.inline(self.annotated_code, self.namespace.keys(),
+                                   local_dict=self.namespace,
+                                   support_code=self.code.support_code,
+                                   compiler=self.compiler,
+                                   headers=['<algorithm>', '<limits>'],
+                                   extra_compile_args=self.extra_compile_args,
+                                   include_dirs=self.include_dirs,
+                                   verbose=0)
+        self._done_first_run = True
+        if self.compiled_python_post is not None:
             exec self.compiled_python_post in self.python_code_namespace
         return ret_val
 
-codegen_targets.add(WeaveCodeObject)
+if weave is not None:
+    codegen_targets.add(WeaveCodeObject)
 
 
 # Use a special implementation for the randn function that makes use of numpy's
@@ -183,14 +235,17 @@ codegen_targets.add(WeaveCodeObject)
 randn_code = {'support_code': '''
         #define BUFFER_SIZE 1024
         // A randn() function that returns a single random number. Internally
-        // it asks numpy's randn function for N (e.g. the number of neurons)
+        // it asks numpy's randn function for BUFFER_SIZE
         // random numbers at a time and then returns one number from this
         // buffer.
         // It needs a reference to the numpy_randn object (the original numpy
         // function), because this is otherwise only available in
         // compiled_function (where is is automatically handled by weave).
         //
-        double _call_randn(py::object& numpy_randn) {
+        double _randn(const int _vectorisation_idx) {
+            // the _vectorisation_idx argument is unused for now, it could in
+            // principle be used to get reproducible random numbers when using
+            // OpenMP etc.
             static PyArrayObject *randn_buffer = NULL;
             static double *buf_pointer = NULL;
             static npy_int curbuffer = 0;
@@ -199,7 +254,8 @@ randn_code = {'support_code': '''
                 if(randn_buffer) Py_DECREF(randn_buffer);
                 py::tuple args(1);
                 args[0] = BUFFER_SIZE;
-                randn_buffer = (PyArrayObject *)PyArray_FromAny(numpy_randn.call(args), NULL, 1, 1, 0, NULL);
+                randn_buffer = (PyArrayObject *)PyArray_FromAny(_namespace_numpy_randn.call(args),
+                                                                NULL, 1, 1, 0, NULL);
                 buf_pointer = (double*)PyArray_GETPTR1(randn_buffer, 0);
             }
             double number = buf_pointer[curbuffer];
@@ -210,7 +266,49 @@ randn_code = {'support_code': '''
                 curbuffer = 0;
             return number;
         }
-        ''', 'hashdefine_code': '#define _randn(_vectorisation_idx) _call_randn(_python_randn)'}
+        '''}
 DEFAULT_FUNCTIONS['randn'].implementations.add_implementation(WeaveCodeObject,
                                                               code=randn_code,
-                                                              name='_randn')
+                                                              name='_randn',
+                                                              namespace={'_numpy_randn': numpy.random.randn})
+
+# Also use numpy for rand
+rand_code = {'support_code': '''
+        #define BUFFER_SIZE 1024
+        // A rand() function that returns a single random number. Internally
+        // it asks numpy's rand function for BUFFER_SIZE
+        // random numbers at a time and then returns one number from this
+        // buffer.
+        // It needs a reference to the numpy_rand object (the original numpy
+        // function), because this is otherwise only available in
+        // compiled_function (where is is automatically handled by weave).
+        //
+        double _rand(const int _vectorisation_idx) {
+            // the _vectorisation_idx argument is unused for now, it could in
+            // principle be used to get reproducible random numbers when using
+            // OpenMP etc.
+            static PyArrayObject *rand_buffer = NULL;
+            static double *buf_pointer = NULL;
+            static npy_int curbuffer = 0;
+            if(curbuffer==0)
+            {
+                if(rand_buffer) Py_DECREF(rand_buffer);
+                py::tuple args(1);
+                args[0] = BUFFER_SIZE;
+                rand_buffer = (PyArrayObject *)PyArray_FromAny(_namespace_numpy_rand.call(args),
+                                                               NULL, 1, 1, 0, NULL);
+                buf_pointer = (double*)PyArray_GETPTR1(rand_buffer, 0);
+            }
+            double number = buf_pointer[curbuffer];
+            curbuffer = curbuffer+1;
+            if (curbuffer == BUFFER_SIZE)
+                // This seems to be safer then using (curbuffer + 1) % BUFFER_SIZE, we might run into
+                // an integer overflow for big networks, otherwise.
+                curbuffer = 0;
+            return number;
+        }
+        '''}
+DEFAULT_FUNCTIONS['rand'].implementations.add_implementation(WeaveCodeObject,
+                                                             code=rand_code,
+                                                             namespace={'_numpy_rand': numpy.random.rand},
+                                                             name='_rand')

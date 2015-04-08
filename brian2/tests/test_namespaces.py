@@ -1,9 +1,14 @@
+import uuid
+
 import sympy
 import numpy
 from numpy.testing.utils import assert_raises
+from nose.plugins.attrib import attr
 
+from brian2.core.variables import Constant
 from brian2.groups.group import Group
 from brian2.units import second, volt
+from brian2.units.fundamentalunits import Unit
 from brian2.units.stdunits import ms, Hz, mV
 from brian2.units.unitsafefunctions import sin, log, exp
 from brian2.utils.logger import catch_logs
@@ -13,17 +18,21 @@ class SimpleGroup(Group):
     def __init__(self, variables, namespace=None):
         self.variables = variables
         self.namespace = namespace
+        # We use a unique name to get repeated warnings
+        Group.__init__(self, name='simplegroup_' +
+                                  str(uuid.uuid4()).replace('-','_'))
 
 def _assert_one_warning(l):
     assert len(l) == 1, "expected one warning got %d" % len(l)
     assert l[0][0] == 'WARNING', "expected a WARNING, got %s instead" % l[0][0]
 
 
+@attr('codegen-independent')
 def test_default_content():
     '''
     Test that the default namespace contains standard units and functions.
     '''
-    group = Group({})
+    group = Group()
     # Units
     assert group.resolve('second', None).get_value_with_unit() == second
     assert group.resolve('volt', None).get_value_with_unit() == volt
@@ -45,9 +54,9 @@ def test_default_content():
     assert group.resolve('inf').get_value() == numpy.inf
 
 
+@attr('codegen-independent')
 def test_explicit_namespace():
     ''' Test resolution with an explicitly provided namespace '''
-
     group = SimpleGroup(namespace={'variable': 42}, variables={})
 
     # Explicitly provided
@@ -68,6 +77,7 @@ def test_explicit_namespace():
         assert len(l) == 0
 
 
+@attr('codegen-independent')
 def test_errors():
     # No explicit namespace
     group = SimpleGroup(namespace=None, variables={})
@@ -78,11 +88,12 @@ def test_errors():
     assert_raises(KeyError, lambda: group.resolve('nonexisting_variable'))
 
 
+@attr('codegen-independent')
 def test_resolution():
     # implicit namespace
     tau = 10*ms
     group = SimpleGroup(namespace=None, variables={})
-    resolved = group.resolve_all(['tau', 'ms'])
+    resolved = group.resolve_all(['tau', 'ms'], ['tau', 'ms'])
     assert len(resolved) == 2
     assert type(resolved) == type(dict())
     assert resolved['tau'].get_value_with_unit() == tau
@@ -92,11 +103,12 @@ def test_resolution():
     # explicit namespace
     group = SimpleGroup(namespace={'tau': 20 * ms}, variables={})
 
-    resolved = group.resolve_all(['tau', 'ms'])
+    resolved = group.resolve_all(['tau', 'ms'], ['tau', 'ms'])
     assert len(resolved) == 2
     assert resolved['tau'].get_value_with_unit() == 20 * ms
 
 
+@attr('codegen-independent')
 def test_warning():
     from brian2.core.functions import DEFAULT_FUNCTIONS
     from brian2.units.stdunits import cm as brian_cm
@@ -107,12 +119,27 @@ def test_warning():
     with catch_logs() as l:
         resolved = group.resolve('exp')
         assert resolved == DEFAULT_FUNCTIONS['exp']
-        assert len(l) == 1
+        assert len(l) == 1, 'got warnings: %s' % str(l)
         assert l[0][1].endswith('.resolution_conflict')
     with catch_logs() as l:
         resolved = group.resolve('cm')
         assert resolved.get_value_with_unit() == brian_cm
-        assert len(l) == 1
+        assert len(l) == 1, 'got warnings: %s' % str(l)
+        assert l[0][1].endswith('.resolution_conflict')
+
+@attr('codegen-independent')
+def test_warning_internal_variables():
+    N = 5
+    group1 = SimpleGroup(namespace=None,
+                         variables={'N': Constant('N', Unit(1), 5)})
+    group2 = SimpleGroup(namespace=None,
+                         variables={'N': Constant('N', Unit(1), 7)})
+    with catch_logs() as l:
+        group1.resolve('N')  # should not raise a warning
+        assert len(l) == 0, 'got warnings: %s' % str(l)
+    with catch_logs() as l:
+        group2.resolve('N')  # should raise a warning
+        assert len(l) == 1, 'got warnings: %s' % str(l)
         assert l[0][1].endswith('.resolution_conflict')
 
 
@@ -122,3 +149,4 @@ if __name__ == '__main__':
     test_errors()
     test_resolution()
     test_warning()
+    test_warning_internal_variables()

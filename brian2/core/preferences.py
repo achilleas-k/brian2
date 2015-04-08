@@ -1,16 +1,17 @@
 '''
 Brian global preferences are stored as attributes of a `BrianGlobalPreferences`
-object ``brian_prefs``.
+object ``prefs``.
 '''
 import itertools
 import re
 import os
 from collections import MutableMapping
+from StringIO import StringIO
 
 from brian2.utils.stringtools import deindent, indent
 from brian2.units.fundamentalunits import have_same_dimensions, Quantity
 
-__all__ = ['PreferenceError', 'BrianPreference', 'brian_prefs']
+__all__ = ['PreferenceError', 'BrianPreference', 'prefs', 'brian_prefs']
 
 def parse_preference_name(name):
     '''
@@ -62,7 +63,7 @@ def check_preference_name(name):
         raise PreferenceError(('Illegal preference name "%s": A preference '
                                'name can only start with a letter and only '
                                'contain letters, digits or underscore.' % name))
-    if name in dir(MutableMapping) or name in brian_prefs.__dict__:
+    if name in dir(MutableMapping) or name in prefs.__dict__:
         raise PreferenceError(('Illegal preference name "%s": This is also the '
                               'name of a method.') % name)
 
@@ -126,15 +127,15 @@ class BrianPreference(object):
 
 class BrianGlobalPreferences(MutableMapping):
     '''
-    Class of the ``brian_prefs`` object.
+    Class of the ``prefs`` object.
     
     Used for getting/setting/validating/registering preference values.
     All preferences must be registered via `register_preferences`. To get or
     set a preference, you can either use a dictionary-based or an
     attribute-based interface::
     
-        brian_prefs['core.default_float_dtype'] = float32
-        brian_prefs.core.default_float_dtype = float32
+        prefs['core.default_float_dtype'] = float32
+        prefs.core.default_float_dtype = float32
         
     Preferences can be read from files, see `load_preferences` and
     `read_preference_file`. Note that `load_preferences` is called
@@ -308,9 +309,20 @@ class BrianGlobalPreferences(MutableMapping):
         '''
         s = ''
         if basename is None:
-            for basename in self.pref_register:
-                s += '**' + basename + '**\n\n'
+            basenames = [tuple(basename.split('.')) for basename in self.pref_register.keys()]
+            basenames.sort()
+            for basename in basenames:
+                lev = len(basename)
+                basename = '.'.join(basename)
+                if lev==1:
+                    s += basename+'\n'+'"'*len(basename)+'\n\n'
+                else:
+                    s += '**' + basename + '**\n\n'
                 s += self._get_one_documentation(basename, link_targets)
+            #for basename in self.pref_register:
+                #s += '**' + basename + '**\n\n'
+                #s += basename+'\n'+'"'*len(basename)+'\n\n'
+                #s += self._get_one_documentation(basename, link_targets)
         else:
             s += self._get_one_documentation(basename, link_targets)
 
@@ -440,6 +452,12 @@ class BrianGlobalPreferences(MutableMapping):
                 self.read_preference_file(file)
             except IOError:
                 pass
+            
+    def reset_to_defaults(self):
+        '''
+        Resets the parameters to their default values.
+        '''
+        self.read_preference_file(StringIO(self.defaults_as_file))
 
     def register_preferences(self, prefbasename, prefbasedoc, **prefs):
         '''
@@ -533,7 +551,7 @@ class BrianGlobalPreferencesView(MutableMapping):
     requests to `BrianGlobalPreferences` and provides documentation and
     autocompletion support for all preferences in the given category. This
     object is used to allow accessing preferences via attributes of the
-    `brian_prefs` object.
+    `prefs` object.
     
     Parameters
     ----------
@@ -607,4 +625,17 @@ class BrianGlobalPreferencesView(MutableMapping):
                                   category=self._basename)
 
 # : Object storing Brian's preferences
-brian_prefs = BrianGlobalPreferences()
+prefs = BrianGlobalPreferences()
+
+
+# Simple class to give a useful error message when using `brian_prefs`
+class ErrorRaiser(object):
+    def __getattr__(self, item):
+        raise AttributeError(("The global preferences object has been renamed "
+                              "from 'brian_prefs' to 'prefs'"))
+
+    def __getitem__(self, item):
+        raise AttributeError(("The global preferences object has been renamed "
+                              "from 'brian_prefs' to 'prefs'"))
+
+brian_prefs = ErrorRaiser()

@@ -41,7 +41,7 @@ The model follows exactly the same syntax as for `NeuronGroup`. There can be par
 (e.g. synaptic variable ``w`` above), but there can also be named
 subexpressions and differential equations, describing the dynamics of synaptic
 variables. In all cases, synaptic variables are created, one value per synapse.
-Internally, these are stored as arrays. There are a few specificities:
+Internally, these are stored as arrays. There are a few things worth noting:
 
 * A variable with the ``_post`` suffix is looked up in the postsynaptic (target) neuron. That is,
   ``v_post`` means variable ``v`` in the postsynaptic neuron.
@@ -90,7 +90,7 @@ arrays rather than single values. Any sort of code can be executed. For example,
 stochastic synapses, with a synaptic weight ``w`` and transmission probability ``p``::
 
 	S=Synapses(input,neurons,model="""w : 1
-    	                              p : 1""",
+                                      p : 1""",
         	                 pre="v+=w*(rand()<p)")
 
 The code means that ``w`` is added to ``v`` with probability ``p`` (note that, internally, ``rand()``
@@ -174,13 +174,14 @@ The code is a boolean statement that should return True when a synapse must be c
 where ``i`` is the presynaptic neuron index and ``j`` is the postsynaptic neuron index
 (special variables).
 Here the first statement creates one-to-one connections, the second statement creates connections
-with a ring structure (``N`` is the number of neurons, assumed to defined elsewhere by the user).
+with a ring structure (``N`` is the number of neurons, assumed to defined elsewhere by the user
+as an external variable).
 This way of creating synapses is generally preferred.
 
 The string expressions can also refer to pre- or postsynaptic variables. This
 can be useful for example for spatial connectivity: assuming that the pre- and
 postsynaptic groups have parameters ``x`` and ``y``, storing their location, the
-folloing statement connects all cells in a 250 um radius::
+following statement connects all cells in a 250 um radius::
 
     S.connect('sqrt((x_pre-x_post)**2 + (y_pre-y_post)**2) < 250*umeter')
 
@@ -214,7 +215,7 @@ interpreted in the following way:
 
 Accessing synaptic variables
 ----------------------------
-Synaptic variables can be accessed in a similar way as `NeuronGroup` variables. They can indexed
+Synaptic variables can be accessed in a similar way as `NeuronGroup` variables. They can be indexed
 with two indexes, corresponding to the indexes of pre and postsynaptic neurons, and optionally with a third
 index in the case of multiple synapses.
 Here are a few examples::
@@ -228,16 +229,20 @@ Here are a few examples::
     S.w[:, :] = 'rand()*nS'
     S.w['abs(x_pre-x_post) < 250*umetre'] = 1*nS
 
+Note that it is also possible to index synaptic variables with a single index
+(integer, slice, or array), but in this case synaptic indices have to be
+provided.
+
 Delays
 ------
 There is a special synaptic variable that is automatically created: ``delay``. It is the propagation delay
 from the presynaptic neuron to the synapse, i.e., the presynaptic delay. This
 is just a convenience syntax for accessing the delay stored in the presynaptic
 pathway: ``pre.delay``. When there is a  postsynaptic code (keyword ``post``),
-this delay can be accessed as ``post.delay``.
+the delay of the postsynaptic pathway can be accessed as ``post.delay``.
 
 The delay variable(s) can be set and accessed in the same way as other synaptic
-varaibles.
+variables.
 
 Multiple pathways
 -----------------
@@ -264,14 +269,17 @@ creates a monitor for variable ``w`` for the synapses 0 and 1::
 
 	M = StateMonitor(S,'w',record=[0,1])
 
-Note that these are *synapse* indices, not neuron indices.
-These can be obtained via the `~Synapses.indices` attribute that can be indexed
-in the same way as synaptic state variables, for example::
+Note that these are *synapse* indices, not neuron indices. More convenient is
+to directly index the `Synapses` object, Brian will automatically calculate the
+indices for you in this case::
 
-	s = S.indices[0, :]  # all synapses originating from neuron 0
-	s = S.indices['i != j']  # all synapses excluding autapses
-	s = S.indices['w > 0']  # all synapses with non-zero weights (at this time)
+	M = StateMonitor(S,'w',record=S[0, :])  # all synapses originating from neuron 0
+	M = StateMonitor(S,'w',record=S['i!=j'])  # all synapses excluding autapses
+	M = StateMonitor(S,'w',record=S['w>0'])  # all synapses with non-zero weights (at this time)
 
-The recorded traces can then be accessed in the usual way, for example::
+The recorded traces can then be accessed in the usual way, again with the
+possibility to index the `Synapses` object::
 
-	plot(M.t / ms, M[0].w / nS)
+	plot(M.t / ms, M[0].w / nS)  # first synapse
+	plot(M.t / ms, M[0, :].w / nS)  # all synapses originating from neuron 0
+	plot(M.t / ms, M['w>0'].w / nS)  # all synapses with non-zero weights (at this time)

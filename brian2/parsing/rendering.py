@@ -42,7 +42,10 @@ class NodeRenderer(object):
       'AugPow': '**=',
       'AugMod': '%=',
       }
-    
+
+    def __init__(self, use_vectorisation_idx=True):
+        self.use_vectorisation_idx = use_vectorisation_idx
+
     def render_expr(self, expr, strip=True):
         if strip:
             expr = expr.strip()
@@ -65,6 +68,9 @@ class NodeRenderer(object):
     def render_func(self, node):
         return self.render_Name(node)
 
+    def render_NameConstant(self, node):
+        return str(node.value)
+
     def render_Name(self, node):
         return node.id
     
@@ -78,7 +84,7 @@ class NodeRenderer(object):
             raise ValueError("Variable number of arguments not supported")
         elif node.kwargs is not None:
             raise ValueError("Keyword arguments not supported")
-        if len(node.args) == 0:
+        if len(node.args) == 0 and self.use_vectorisation_idx:
             # argument-less function call such as randn() are transformed into
             # randn(_vectorisation_idx) -- this is important for Python code
             # in particular, because it has to return an array of values.
@@ -94,11 +100,11 @@ class NodeRenderer(object):
         numbers, names and function calls.
         '''
         if node.__class__.__name__ == 'Name':
-            return self.render_Name(node)
+            return self.render_node(node)
         elif node.__class__.__name__ == 'Num' and node.n >= 0:
-            return self.render_Num(node)
+            return self.render_node(node)
         elif node.__class__.__name__ == 'Call':
-            return self.render_Call(node)
+            return self.render_node(node)
         else:
             return '(%s)' % self.render_node(node)
 
@@ -132,8 +138,8 @@ class NodeRenderer(object):
         return self.render_BinOp_parentheses(node.left, node.comparators[0], node.ops[0])
         
     def render_UnaryOp(self, node):
-        return '%s%s' % (self.expression_ops[node.op.__class__.__name__],
-                         self.render_element_parentheses(node.operand))
+        return '%s %s' % (self.expression_ops[node.op.__class__.__name__],
+                          self.render_element_parentheses(node.operand))
                 
     def render_Assign(self, node):
         if len(node.targets)>1:
@@ -211,7 +217,7 @@ class SympyNodeRenderer(NodeRenderer):
             return 'Symbol("%s", real=True)' % node.id
 
     def render_Num(self, node):
-        return 'Float(%f)' % node.n
+        return 'Float(%s)' % node.n
 
 
 class CPPNodeRenderer(NodeRenderer):
@@ -228,12 +234,13 @@ class CPPNodeRenderer(NodeRenderer):
         if node.op.__class__.__name__=='Pow':
             return 'pow(%s, %s)' % (self.render_node(node.left),
                                     self.render_node(node.right))
-        elif node.op.__class__.__name__ == 'Mod':
-            # In C, the modulo operator is only defined on integers
-            return 'fmod(%s, %s)' % (self.render_node(node.left),
-                                     self.render_node(node.right))
         else:
             return NodeRenderer.render_BinOp(self, node)
+
+    def render_NameConstant(self, node):
+        # In Python 3.4, None, True and False go here
+        return {True: 'true',
+                False: 'false'}.get(node.value, node.value)
 
     def render_Name(self, node):
         # Replace Python's True and False with their C++ bool equivalents

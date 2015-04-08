@@ -32,10 +32,14 @@ class NumpyCodeGenerator(CodeGenerator):
     def translate_statement(self, statement):
         # TODO: optimisation, translate arithmetic to a sequence of inplace
         # operations like a=b+c -> add(b, c, a)
-        var, op, expr = statement.var, statement.op, statement.expr
+        var, op, expr, comment = (statement.var, statement.op,
+                                  statement.expr, statement.comment)
         if op == ':=':
             op = '='
-        return var + ' ' + op + ' ' + self.translate_expression(expr)
+        code = var + ' ' + op + ' ' + self.translate_expression(expr)
+        if len(comment):
+            code += ' # ' + comment
+        return code
         
     def translate_one_statement_sequence(self, statements):
         variables = self.variables
@@ -53,7 +57,10 @@ class NumpyCodeGenerator(CodeGenerator):
 #            line = line.format(varname=varname, array_name=self.get_array_name(var), index=index)
             line = varname + ' = ' + self.get_array_name(var)
             if not index in self.iterate_all:
-                line = line + '[' + index + ']'
+                line += '[' + index + ']'
+            elif varname in write:
+                # avoid potential issues with aliased variables, see github #259
+                line += '.copy()'
             lines.append(line)
         # the actual code
         created_vars = set([])
@@ -81,24 +88,13 @@ class NumpyCodeGenerator(CodeGenerator):
         for varname in write:
             var = variables[varname]
             index_var = variable_indices[varname]
-            # check if all operations were inplace and we're operating on the
-            # whole vector, if so we don't need to write the array back
-            if not index_var in self.iterate_all:
-                all_inplace = False
+            line = self.get_array_name(var)
+            if index_var in self.iterate_all:
+                line = line + '[:]'
             else:
-                all_inplace = True
-                for stmt in statements:
-                    if stmt.var == varname and not stmt.inplace:
-                        all_inplace = False
-                        break
-            if not all_inplace:
-                line = self.get_array_name(var)
-                if index_var in self.iterate_all:
-                    line = line + '[:]'
-                else:
-                    line = line + '[' + index_var + ']'
-                line = line + ' = ' + varname
-                lines.append(line)
+                line = line + '[' + index_var + ']'
+            line = line + ' = ' + varname
+            lines.append(line)
 #                if index_var in iterate_all:
 #                    line = '{array_name}[:] = {varname}'
 #                else:
@@ -124,16 +120,14 @@ class NumpyCodeGenerator(CodeGenerator):
 
         return lines
 
-    def translate_statement_sequence(self, statements):
-        # For numpy, no addiional keywords are provided to the template
-        scalar_code = {}
-        vector_code = {}
-        for name, block in statements.iteritems():
-            scalar_statements = [stmt for stmt in block if stmt.scalar]
-            vector_statements = [stmt for stmt in block if not stmt.scalar]
-            scalar_code[name] = self.translate_one_statement_sequence(scalar_statements)
-            vector_code[name] = self.translate_one_statement_sequence(vector_statements)
-        return scalar_code, vector_code, {}
+    def determine_keywords(self):
+        try:
+            import scipy
+            scipy_available = True
+        except ImportError:
+            scipy_available = False
+
+        return {'_scipy_available': scipy_available}
 
 ################################################################################
 # Implement functions
@@ -144,26 +138,38 @@ for func_name, func in [('sin', np.sin), ('cos', np.cos), ('tan', np.tan),
                         ('exp', np.exp), ('log', np.log), ('log10', np.log10),
                         ('sqrt', np.sqrt), ('arcsin', np.arcsin),
                         ('arccos', np.arccos), ('arctan', np.arctan),
-                        ('abs', np.abs), ('mod', np.mod)]:
+                        ('abs', np.abs), ('mod', np.fmod),
+                        ('sign', np.sign)]:
     DEFAULT_FUNCTIONS[func_name].implementations.add_implementation(NumpyCodeGenerator,
                                                                     code=func)
 
 # Functions that are implemented in a somewhat special way
 def randn_func(vectorisation_idx):
     try:
-        N = int(vectorisation_idx)
-    except (TypeError, ValueError):
         N = len(vectorisation_idx)
+    except TypeError:
+        N = int(vectorisation_idx)
 
-    return np.random.randn(N)
+    numbers = np.random.randn(N)
+    if N == 1:
+        return numbers[0]
+    else:
+        return numbers
+
 
 def rand_func(vectorisation_idx):
     try:
-        N = int(vectorisation_idx)
-    except (TypeError, ValueError):
         N = len(vectorisation_idx)
+    except TypeError:
+        N = int(vectorisation_idx)
 
-    return np.random.rand(N)
+    numbers = np.random.rand(N)
+    if N == 1:
+        return numbers[0]
+    else:
+        return numbers
+
+
 DEFAULT_FUNCTIONS['randn'].implementations.add_implementation(NumpyCodeGenerator,
                                                               code=randn_func)
 DEFAULT_FUNCTIONS['rand'].implementations.add_implementation(NumpyCodeGenerator,
